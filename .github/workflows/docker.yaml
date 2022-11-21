@@ -1,0 +1,63 @@
+name: "Docker Build with Kaniko"
+
+on:
+  workflow_call:
+    inputs:
+      env_name:
+        required: true
+        type: string
+      AWS_REGION:
+        required: true
+        type: string
+      AWS_ACCOUNT_ID:
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+  actions: write
+
+jobs:
+  build:
+    name: Build Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip Duplicate Actions
+        uses: fkirc/skip-duplicate-actions@v4.0.0
+        with:
+          concurrent_skipping: 'same_content'
+          cancel_others: 'true'
+
+      - name: Check out code
+        uses: actions/checkout@v2
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/github-actions/fl-${{ env.env_name }}-${{ github.event.repository.name }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR Private
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+        # for tag we use gha-prod
+      - uses: docker/metadata-action@v3
+        name: Generate tags
+        id: metadata
+        with:
+          images: ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ github.event.repository.name }}
+          tags: |
+            type=sha,enable=true,priority=600,prefix=gha-,suffix=
+            type=ref,enable=true,priority=600,prefix=gha-latest-,suffix=,event=branch
+            type=ref,enable=true,priority=600,prefix=gha-prod-,suffix=,event=tag
+            type=ref,enable=true,priority=600,prefix=gha-,suffix=,event=pr
+
+      - uses: int128/kaniko-action@v1
+        name: Build with Kaniko
+        with:
+          push: true
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}
+          cache: true
+          cache-repository: ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/kaniko-cache
