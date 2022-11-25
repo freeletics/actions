@@ -1,0 +1,52 @@
+name: Create tag/release
+
+on:
+  workflow_call:
+    inputs:
+      deploy:
+        required: true
+        type: string
+        default: 'true'
+
+jobs:
+  build:
+    name: Create Tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip Duplicate Actions
+        uses: fkirc/skip-duplicate-actions@v5.2.0
+        if: github.event.inputs.deploy == 'true'
+        with:
+          concurrent_skipping: 'same_content'
+          cancel_others: 'true'
+
+      - name: Check out code
+        if: github.event.inputs.deploy == 'true'
+        uses: actions/checkout@v2
+
+      - name: Get current date
+        if: github.event.inputs.deploy == 'true'
+        id: date
+        run: echo "date=$(date +'%Y-%m-%d_%H-%M')" >> $GITHUB_OUTPUT
+
+
+      - name: Create tag
+        if: github.event.inputs.deploy == 'true'
+        uses: actions/github-script@v6.3.3
+        with:
+          script: |
+            github.rest.git.createRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: "refs/tags/gha-prod-${{ steps.date.outputs.date }}",
+              sha: context.sha
+            })
+      - name: Trigger Workflow
+        uses: actions/github-script@v6.3.3
+        with:
+          script: |
+            github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'gha-dispatcher-tag.yaml',
+              ref: 'refs/tags/gha-prod-${{ steps.date.outputs.date }}'

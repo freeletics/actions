@@ -1,0 +1,66 @@
+name: Tag Dispatcher
+
+on:
+  workflow_call:
+    inputs:
+      env_name:
+        required: true
+        type: string
+      AWS_REGION:
+        required: true
+        type: string
+      AWS_ACCOUNT_ID:
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+  actions: write
+
+
+permissions:
+  id-token: write
+  contents: read
+  actions: write
+
+jobs:
+  build:
+    name: Build Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip Duplicate Actions
+        uses: fkirc/skip-duplicate-actions@v5.2.0
+        with:
+          concurrent_skipping: 'same_content'
+          cancel_others: 'true'
+
+      - name: Check out code
+        uses: actions/checkout@v2
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1.7.0
+        with:
+          role-to-assume: arn:aws:iam::${{ inputs.AWS_ACCOUNT_ID }}:role/github-actions/fl-${{ inputs.env_name }}-${{ github.event.repository.name }}
+          aws-region: ${{ inputs.AWS_REGION }}
+
+      - name: Login to Amazon ECR Private
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1.5.3
+
+        # for tag we use gha-prod
+      - uses: docker/metadata-action@v4.1.1
+        name: Generate tags
+        id: metadata
+        with:
+          images: ${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/${{ github.event.repository.name }}
+          tags: |
+            type=raw,value=${{github.ref_name}}
+
+      - uses: int128/kaniko-action@v1.14.0
+        name: Build with Kaniko
+        with:
+          push: true
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}
+          cache: true
+          cache-repository: ${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/kaniko-cache
