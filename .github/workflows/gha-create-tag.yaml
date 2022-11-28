@@ -50,16 +50,8 @@ jobs:
 
       ##### Git versions #### 
       - name: Check out code
-        uses: actions/checkout@v3
         if: github.event.inputs.deploy == 'false'
-        env:
-          GITHUB_TOKEN: ${{ secrets.JENKINS_PAT_FLUXCD }}
-        with:
-          fetch-depth: 0
-          repository: 'freeletics/releases'
-          path: 'releases'
-          ref: 'main'
-          token: ${{ secrets.JENKINS_PAT_FLUXCD }}
+        run: git clone https://${{ secrets.JENKINS_PAT_FLUXCD }}@github.com/freeletics/releases.git
 
 
       - name: Create versions.yaml
