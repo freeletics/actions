@@ -47,10 +47,11 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v2.5.0
         if: github.event.inputs.deploy == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.JENKINS_PAT_FLUXCD }}
         with:
-          repository: 'freeletics/releases.git'
+          repository: 'freeletics/releases'
           path: 'releases'
-          ref: 'main'
           token: ${{ secrets.JENKINS_PAT_FLUXCD }}
 
 
