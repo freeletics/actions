@@ -50,8 +50,9 @@ jobs:
 
       ##### Git versions #### 
       - name: Check out code
+        uses: actions/checkout@v3
         if: github.event.inputs.deploy == 'false'
-        run:
+        with:
           fetch-depth: 0
           repository: 'freeletics/releases'
           path: 'releases'
