@@ -19,11 +19,6 @@ permissions:
   actions: write
 
 
-permissions:
-  id-token: write
-  contents: read
-  actions: write
-
 jobs:
   build:
     name: Build Docker image

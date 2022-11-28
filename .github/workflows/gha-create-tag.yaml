@@ -34,6 +34,7 @@ jobs:
         if: github.event.inputs.deploy == 'true'
         uses: actions/github-script@v6.3.3
         with:
+          github-token: ${{ secrets.JENKINS_PAT_FLUXCD }}
           script: |
             github.rest.git.createRef({
               owner: context.repo.owner,
@@ -44,6 +45,7 @@ jobs:
       - name: Trigger Workflow
         uses: actions/github-script@v6.3.3
         with:
+          github-token: ${{ secrets.JENKINS_PAT_FLUXCD }}
           script: |
             github.rest.actions.createWorkflowDispatch({
               owner: context.repo.owner,
