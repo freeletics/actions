@@ -50,7 +50,7 @@ jobs:
 
       ##### Git versions #### 
       - name: Check out code
-        uses: actions/checkout@v2.5.0
+        uses: actions/checkout@v3
         if: github.event.inputs.deploy == 'false'
         env:
           GITHUB_TOKEN: ${{ secrets.JENKINS_PAT_FLUXCD }}
