@@ -58,14 +58,14 @@ jobs:
         uses: mikefarah/yq@v4.30.5
         if: github.event.inputs.deploy == 'true'
         with:
-          cmd: yq e '.${{ context.repo.repo }} = "${{ steps.date.outputs.date }}"' releases/versions.yaml > releases/versions.yaml
+          cmd: yq e '.${{ github.event.repository.name }} = "${{ steps.date.outputs.date }}"' releases/versions.yaml > releases/versions.yaml
 
       - name: Commit file to versions
         uses: stefanzweifel/git-auto-commit-action@v4.15.4
         env:
           GITHUB_TOKEN: ${{ secrets.JENKINS_PAT_FLUXCD }}
         with:
-          commit_message: "${{ context.repo.repo }} BUMP"
+          commit_message: "${{ github.event.repository.name }} BUMP"
           branch: main
           file_pattern: 'releases/versions.yaml'
           repository: 'releases'
