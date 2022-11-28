@@ -51,7 +51,7 @@ jobs:
       ##### Git versions #### 
       - name: Check out code
         uses: actions/checkout@v2.5.0
-        if: github.event.inputs.deploy == 'true'
+        if: github.event.inputs.deploy == 'false'
         env:
           GITHUB_TOKEN: ${{ secrets.JENKINS_PAT_FLUXCD }}
         with:
@@ -64,12 +64,13 @@ jobs:
 
       - name: Create versions.yaml
         uses: mikefarah/yq@v4.30.5
-        if: github.event.inputs.deploy == 'true'
+        if: github.event.inputs.deploy == 'false'
         with:
           cmd: yq e '.${{ github.event.repository.name }} = "${{ steps.date.outputs.date }}"' releases/versions.yaml > releases/versions.yaml
 
       - name: Commit file to versions
         uses: stefanzweifel/git-auto-commit-action@v4.15.4
+        if: github.event.inputs.deploy == 'false'
         env:
           GITHUB_TOKEN: ${{ secrets.JENKINS_PAT_FLUXCD }}
         with:
