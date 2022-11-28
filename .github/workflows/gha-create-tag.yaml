@@ -68,7 +68,7 @@ jobs:
 
       - name: Push versions.yaml back
         if: github.event.inputs.deploy == 'true'
-      - run: |
+        run: |
           cd releases
           git config user.name github-actions
           git config user.email github-actions@github.com
