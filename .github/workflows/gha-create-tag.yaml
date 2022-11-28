@@ -42,13 +42,3 @@ jobs:
               ref: "refs/tags/gha-prod-${{ steps.date.outputs.date }}",
               sha: context.sha
             })
-      - name: Trigger Workflow
-        uses: actions/github-script@v6.3.3
-        with:
-          github-token: ${{ secrets.JENKINS_PAT_FLUXCD }}
-          script: |
-            github.rest.actions.createWorkflowDispatch({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: 'gha-dispatcher-tag.yaml',
-              ref: 'refs/tags/gha-prod-${{ steps.date.outputs.date }}'
