@@ -51,7 +51,12 @@ jobs:
       ##### Git versions #### 
       - name: Check out code
         if: github.event.inputs.deploy == 'false'
-        run: git clone https://${{ secrets.JENKINS_PAT_FLUXCD }}@github.com/freeletics/releases.git
+        run:
+          fetch-depth: 0
+          repository: 'freeletics/releases'
+          path: 'releases'
+          ref: 'main'
+          token: ${{ secrets.JENKINS_PAT_FLUXCD }}
 
 
       - name: Create versions.yaml
