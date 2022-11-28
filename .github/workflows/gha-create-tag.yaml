@@ -51,7 +51,7 @@ jobs:
           repository: 'freeletics/releases'
           path: 'releases'
           ref: 'main'
-          github-token: ${{ secrets.JENKINS_PAT_FLUXCD }}
+          token: ${{ secrets.JENKINS_PAT_FLUXCD }}
 
 
       - name: Create versions.yaml
