@@ -64,7 +64,7 @@ jobs:
         uses: mikefarah/yq@v4.30.5
         if: github.event.inputs.deploy == 'true'
         with:
-          cmd: yq e '.${{ github.event.repository.name }} = "${{ steps.date.outputs.date }}"' releases/versions.yaml > releases/versions.yaml
+          cmd: yq -i e '.${{ github.event.repository.name }} = "${{ steps.date.outputs.date }}"' releases/versions.yaml
 
       - name: Push versions.yaml back
         if: github.event.inputs.deploy == 'true'
