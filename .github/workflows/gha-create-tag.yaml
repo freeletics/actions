@@ -27,7 +27,7 @@ jobs:
 
       - name: Check out code
         if: github.event.inputs.deploy == 'true'
-        uses: actions/checkout@3
+        uses: actions/checkout@v3
 
       - name: Get current date
         if: github.event.inputs.deploy == 'true'
