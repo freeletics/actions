@@ -1,8 +1,12 @@
-name: "Docker Build with Kaniko"
+name: "Deploy integration"
 
 on:
   workflow_call:
     inputs:
+      deploy_integration:
+        required: true
+        type: string
+        default: 'true'
       env_name:
         required: true
         type: string
@@ -50,9 +54,7 @@ jobs:
           images: ${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/${{ github.event.repository.name }}
           tags: |
             type=sha,enable=true,priority=600,prefix=gha-,suffix=
-            type=ref,enable=true,priority=600,prefix=gha-latest-,suffix=,event=branch
-            type=ref,enable=true,priority=600,prefix=gha-prod-,suffix=,event=tag
-            type=ref,enable=true,priority=600,prefix=gha-,suffix=,event=pr
+            type=raw,enable=true,priority=600,prefix=gha-deploy-integration,value={{date 'YYYYMMDDH:MM:SS'}}
 
       - uses: int128/kaniko-action@v1.14.0
         name: Build with Kaniko
