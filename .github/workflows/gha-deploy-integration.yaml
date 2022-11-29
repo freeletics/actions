@@ -3,10 +3,6 @@ name: "Deploy integration"
 on:
   workflow_call:
     inputs:
-      deploy_integration:
-        required: true
-        type: string
-        default: 'true'
       env_name:
         required: true
         type: string
@@ -29,30 +25,25 @@ jobs:
     steps:
       - name: Skip Duplicate Actions
         uses: fkirc/skip-duplicate-actions@v5.2.0
-        if: github.event.inputs.deploy_integration == 'true'
         with:
           concurrent_skipping: 'same_content'
           cancel_others: 'true'
 
       - name: Check out code
-        if: github.event.inputs.deploy_integration == 'true'
         uses: actions/checkout@v3
 
       - name: Configure AWS credentials
-        if: github.event.inputs.deploy_integration == 'true'
         uses: aws-actions/configure-aws-credentials@v1.7.0
         with:
           role-to-assume: arn:aws:iam::${{ inputs.AWS_ACCOUNT_ID }}:role/github-actions/fl-${{ inputs.env_name }}-${{ github.event.repository.name }}
           aws-region: ${{ inputs.AWS_REGION }}
 
       - name: Login to Amazon ECR Private
-        if: github.event.inputs.deploy_integration == 'true'
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1.5.3
 
         # for tag we use gha-prod
       - uses: docker/metadata-action@v4.1.1
-        if: github.event.inputs.deploy_integration == 'true'
         name: Generate tags
         id: metadata
         with:
@@ -62,7 +53,6 @@ jobs:
             type=raw,enable=true,priority=600,prefix=gha-deploy-integration,value={{date 'YYYYMMDDH:MM:SS'}}
 
       - uses: int128/kaniko-action@v1.14.0
-        if: github.event.inputs.deploy_integration == 'true'
         name: Build with Kaniko
         with:
           push: true
