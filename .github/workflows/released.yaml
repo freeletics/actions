@@ -13,10 +13,6 @@ jobs:
     name: Build Docker image
     runs-on: ubuntu-latest
     steps:
-      - name: Get current date
-        if: github.event.inputs.deploy == 'true'
-        id: date
-        run: echo "date=$(date +'%Y-%m-%d_%H-%M')" >> $GITHUB_OUTPUT
       ##### Git versions #### 
       - name: Check out code
         uses: actions/checkout@v3
@@ -32,7 +28,7 @@ jobs:
         uses: mikefarah/yq@v4.30.5
         if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
         with:
-          cmd: yq e '.${{ github.event.repository.name }} = "${{ steps.date.outputs.date }}"' releases/versions.yaml > releases/versions.yaml
+          cmd: yq e '.${{ github.event.repository.name }} = "${{ github.ref_name }}"' releases/versions.yaml > releases/versions.yaml
 
       - name: Push versions.yaml back
         if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
