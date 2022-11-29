@@ -13,6 +13,10 @@ jobs:
     name: Build Docker image
     runs-on: ubuntu-latest
     steps:
+      - name: Get current date
+        if: github.event.inputs.deploy == 'true'
+        id: date
+        run: echo "date=$(date +'%Y-%m-%d_%H-%M')" >> $GITHUB_OUTPUT
       ##### Git versions #### 
       - name: Check out code
         uses: actions/checkout@v3
