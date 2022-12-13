@@ -62,5 +62,5 @@ jobs:
       - uses: docker/build-push-action@v3
         name: Build with plain docker
         with:
-          push: false
+          push: true
           tags: ${{ steps.metadata.outputs.tags }}
