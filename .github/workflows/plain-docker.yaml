@@ -1,0 +1,66 @@
+name: "Docker Build with Plain Docker"
+
+on:
+  workflow_call:
+    inputs:
+      env_name:
+        required: true
+        type: string
+      AWS_REGION:
+        required: true
+        type: string
+      AWS_ACCOUNT_ID:
+        required: true
+        type: string
+      cache:
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  id-token: write
+  contents: read
+  actions: write
+
+jobs:
+  build:
+    name: Build Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip Duplicate Actions
+        uses: fkirc/skip-duplicate-actions@v5.2.0
+        with:
+          concurrent_skipping: 'same_content'
+          cancel_others: 'true'
+
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1.7.0
+        with:
+          role-to-assume: arn:aws:iam::${{ inputs.AWS_ACCOUNT_ID }}:role/github-actions/fl-${{ inputs.env_name }}-${{ github.event.repository.name }}
+          aws-region: ${{ inputs.AWS_REGION }}
+
+      - name: Login to Amazon ECR Private
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1.5.3
+
+        # for tag we use gha-prod
+      - uses: docker/metadata-action@v4.1.1
+        name: Generate tags
+        id: metadata
+        with:
+          images: ${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/${{ github.event.repository.name }}
+          tags: |
+            type=sha,enable=true,priority=600,prefix=gha-,suffix=
+            type=ref,enable=true,priority=600,prefix=gha-latest-,suffix=,event=branch
+            type=ref,enable=true,priority=600,prefix=gha-prod-,suffix=,event=tag
+            type=ref,enable=true,priority=600,prefix=gha-,suffix=,event=pr
+            
+        
+      - uses: docker/build-push-action@v3
+        name: Build with plain docker
+        with:
+          push: false
+          tags: ${{ steps.metadata.outputs.tags }}
