@@ -12,6 +12,10 @@ on:
       AWS_ACCOUNT_ID:
         required: true
         type: string
+      cache:
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   id-token: write
@@ -60,5 +64,5 @@ jobs:
           push: true
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}
-          cache: true
+          cache: ${{ inputs.cache }} 
           cache-repository: ${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/kaniko-cache
