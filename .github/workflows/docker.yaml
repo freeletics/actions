@@ -47,6 +47,7 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v1.5.3
 
         # for tag we use gha-prod
+        # for intgration get a new image tag with date of today; then a webhook will notify Flux of changes
       - uses: docker/metadata-action@v4.1.1
         name: Generate tags
         id: metadata
@@ -57,6 +58,7 @@ jobs:
             type=ref,enable=true,priority=600,prefix=gha-latest-,suffix=,event=branch
             type=ref,enable=true,priority=600,prefix=gha-prod-,suffix=,event=tag
             type=ref,enable=true,priority=600,prefix=gha-,suffix=,event=pr
+            type=raw,enable=true,priority=600,prefix=gha-deploy-integration-,value={{date 'YYYYMMDDH:MM:SS'}}
 
       - uses: int128/kaniko-action@v1.14.0
         name: Build with Kaniko
