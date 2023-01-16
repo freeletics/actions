@@ -1,0 +1,170 @@
+name: "ROR CI"
+
+permissions:
+  actions: write
+  contents: read
+
+on:
+  workflow_call:
+    inputs:
+      test_database_name:
+        required: false
+        type: string
+      core_admin_test_database_name:
+        required: false
+        type: string
+        default: "fl-admin-test"
+      test_notification_slack_channel_id:
+        required: false
+        type: string
+        default: "true"
+
+env:
+  BUNDLE_GITHUB__COM: ${{ secrets.PRIVATE_GEMS_SECRET }}:x-oauth-basic
+  DANGER_GITHUB_API_TOKEN: ${{ secrets.DANGER_GITHUB_API_TOKEN }}
+  PGHOST: 127.0.0.1
+  PGUSER: postgres
+  PGPASSWORD: postgres
+
+jobs:
+  Tests:
+    # You must use a Linux environment when using service containers or container jobs
+    runs-on: ubuntu-latest
+    env:
+      RAILS_ENV: test
+      TEST_DATABASE_URL: "postgres:///${{inputs.test_database_name || github.event.repository.name}}"
+      TEST_CORE_ADMIN_DATABASE_URL: "postgres:///${{inputs.core_admin_test_database_name}}"
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 15
+    outputs:
+      test_job_result: ${{ steps.test_job_result.outputs.test_job_result }}
+    steps:
+      - name: Skip Duplicate Actions
+        uses: fkirc/skip-duplicate-actions@v5.2.0
+        with:
+          concurrent_skipping: "same_content"
+          cancel_others: "true"
+
+      - uses: actions/checkout@v3
+        name: Checkout the code
+      - uses: ruby/setup-ruby@v1
+        name: Prepare ruby environment
+        with:
+          bundler-cache: true
+      - name: Set up database
+        run: |
+          pg_config --version
+      - name: Load database schema
+        run: |
+          bundle exec rails db:create
+          bundle exec rails db:schema:load
+      - name: Run tests
+        run: |
+          bundle exec rspec
+      - name: Set Spec result
+        id: test_job_result
+        run: echo "test_job_result=${{job.status}}" >> $GITHUB_OUTPUT
+  Linters:
+    runs-on: ubuntu-latest
+    outputs:
+      linters_job_result: ${{ steps.linters_job_result.outputs.linters_job_result }}
+    steps:
+      - name: Get branch name
+        id: branch-name
+        uses: tj-actions/branch-names@v6.4
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 50
+      - name: Install Ruby and gems
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+      - name: Lint Ruby files
+        run: bundle exec rubocop -D -c .rubocop.yml
+      - name: Set Linters result
+        id: linters_job_result
+        run: echo "linters_job_result=${{job.status}}" >> $GITHUB_OUTPUT
+  Notifications:
+    if: ${{ always() }}
+    needs: [Tests, Linters]
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Test"
+        env:
+          GITHUB_CONTEXT: ${{ toJson(github) }}
+        run: |
+          echo "$GITHUB_CONTEXT"
+      - name: Slack Message Color
+        if: ${{needs.Linters.outputs.linters_job_result == 'success' && needs.Tests.outputs.test_job_result == 'success'}}
+        id: slack_mes_color
+        run: |
+          echo "value=#2eb886" >> $GITHUB_OUTPUT
+      - name: Slack Notification
+        id: slack_notification
+        uses: slackapi/slack-github-action@v1.23.0
+        with:
+          # Slack channel id, channel name, or user id to post message.
+          # See also: https://api.slack.com/methods/chat.postMessage#channels
+          # You can pass in multiple channels to post to by providing a comma-delimited list of channel IDs.
+          channel-id: ${{inputs.test_notification_slack_channel_id}}
+          payload: |
+            {
+              "attachments": [
+                {
+                  "color": "${{steps.slack_mes_color.outputs.value || '#c80000'}}",
+                  "blocks": [
+                            {
+                              "type": "section",
+                              "text": {
+                                "type": "mrkdwn",
+                                "text": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} | *GHA Result*> "
+                              }
+                            },
+                            {
+                              "type": "section",
+                              "fields": [
+                                {
+                                  "type": "mrkdwn",
+                                  "text": "*Repo:* ${{ github.event.repository.name }}"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "section",
+                              "fields": [
+                                {
+                                  "type": "mrkdwn",
+                                  "text": "*Branch/PR:* ${{ github.event.pull_request.title || github.ref_name }} <${{ github.event.commits[0].url}} | commit>"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "section",
+                              "fields": [
+                                {
+                                  "type": "mrkdwn",
+                                  "text": "*Author:* ${{github.event.pull_request.user.login || github.event.commits[0].author.name}}"
+                                }
+                              ]
+                            }
+                          ]
+                }
+              ]
+            }
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.BE_SLACK_BOT_TOKEN }}
+      - name: Notification status
+        run: |
+          echo  Tests Status:  ${{needs.Tests.outputs.test_job_result}}
