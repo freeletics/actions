@@ -20,7 +20,7 @@ on:
         default: "true"
 
 env:
-  BUNDLE_GITHUB__COM: ${{ secrets.PRIVATE_GEMS_SECRET }}:x-oauth-basic
+  BUNDLE_GITHUB__COM: "${{ secrets.PRIVATE_GEMS_SECRET }}:x-oauth-basic"
   DANGER_GITHUB_API_TOKEN: ${{ secrets.DANGER_GITHUB_API_TOKEN }}
   PGHOST: 127.0.0.1
   PGUSER: postgres
