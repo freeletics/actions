@@ -1,4 +1,4 @@
-name: "Docker Build with Kaniko"
+name: "Auto Deploy integration"
 
 on:
   workflow_call:
@@ -52,7 +52,6 @@ jobs:
         run: echo "date=$(date +'%s')" >> $GITHUB_OUTPUT
 
         # for tag we use gha-prod
-        # for intgration get a new image tag with date of today; then a webhook will notify Flux of changes
       - uses: docker/metadata-action@v4.1.1
         name: Generate tags
         id: metadata
@@ -60,9 +59,7 @@ jobs:
           images: ${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/${{ github.event.repository.name }}
           tags: |
             type=sha,enable=true,priority=600,prefix=gha-,suffix=
-            type=ref,enable=true,priority=600,prefix=gha-latest-,suffix=,event=branch
-            type=ref,enable=true,priority=600,prefix=gha-deploy-prod-,suffix=,event=tag
-            type=ref,enable=true,priority=600,prefix=gha-,suffix=,event=pr
+            type=raw,enable=true,priority=600,prefix=gha-deploy-int-,value=${{ steps.timestamp.outputs.date }}
 
       - uses: int128/kaniko-action@v1.14.0
         name: Build with Kaniko
