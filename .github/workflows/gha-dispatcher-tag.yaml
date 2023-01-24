@@ -6,18 +6,25 @@ on:
       env_name:
         required: true
         type: string
+      AWS_ECR_ENV_NAME:
+        required: false
+        type: string
+        default: "prod"
       AWS_REGION:
         required: true
         type: string
       AWS_ACCOUNT_ID:
         required: true
         type: string
+      KANIKO_CACHE:
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   id-token: write
   contents: read
   actions: write
-
 
 jobs:
   build:
@@ -27,8 +34,8 @@ jobs:
       - name: Skip Duplicate Actions
         uses: fkirc/skip-duplicate-actions@v5.2.0
         with:
-          concurrent_skipping: 'same_content'
-          cancel_others: 'true'
+          concurrent_skipping: "same_content"
+          cancel_others: "true"
 
       - name: Check out code
         uses: actions/checkout@v2.5.0
@@ -36,7 +43,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v1.7.0
         with:
-          role-to-assume: arn:aws:iam::${{ inputs.AWS_ACCOUNT_ID }}:role/github-actions/fl-${{ inputs.env_name }}-${{ github.event.repository.name }}
+          role-to-assume: arn:aws:iam::${{ inputs.AWS_ACCOUNT_ID }}:role/github-actions/fl-${{ inputs.AWS_ECR_ENV_NAME }}-${{ github.event.repository.name }}
           aws-region: ${{ inputs.AWS_REGION }}
 
       - name: Login to Amazon ECR Private
@@ -58,5 +65,5 @@ jobs:
           push: true
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}
-          cache: true
+          cache: ${{ inputs.KANIKO_CACHE }}
           cache-repository: ${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/kaniko-cache
