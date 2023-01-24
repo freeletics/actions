@@ -3,9 +3,6 @@ name: "Docker Build with Kaniko"
 on:
   workflow_call:
     inputs:
-      env_name:
-        required: true
-        type: string
       AWS_ECR_ENV_NAME:
         required: false
         type: string
