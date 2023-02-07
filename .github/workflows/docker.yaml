@@ -31,11 +31,11 @@ jobs:
     name: Build Docker image
     runs-on: ubuntu-latest
     steps:
-      # - name: Skip Duplicate Actions
-      #   uses: fkirc/skip-duplicate-actions@v5.2.0
-      #   with:
-      #     concurrent_skipping: "same_content"
-      #     cancel_others: "true"
+      - name: Skip Duplicate Actions
+        uses: fkirc/skip-duplicate-actions@v5.2.0
+        with:
+          concurrent_skipping: "same_content"
+          cancel_others: "true"
 
       - name: Check out code
         uses: actions/checkout@v3

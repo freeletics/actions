@@ -50,11 +50,11 @@ jobs:
     outputs:
       test_job_result: ${{ steps.test_job_result.outputs.test_job_result }}
     steps:
-      # - name: Skip Duplicate Actions
-      #   uses: fkirc/skip-duplicate-actions@v5.2.0
-      #   with:
-      #     concurrent_skipping: "same_content"
-      #     cancel_others: "true"
+      - name: Skip Duplicate Actions
+        uses: fkirc/skip-duplicate-actions@v5.2.0
+        with:
+          concurrent_skipping: "same_content"
+          cancel_others: "true"
 
       - uses: actions/checkout@v3
         name: Checkout the code
