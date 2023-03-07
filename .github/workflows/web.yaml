@@ -20,10 +20,10 @@ on:
         required: false
         type: boolean
         default: true
-      ARGS:
+      APP_ENV:
         required: false
         type: string
-        default: ""
+        default: "staging"
 
 permissions:
   id-token: write
@@ -78,5 +78,7 @@ jobs:
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}
           cache: ${{ inputs.KANIKO_CACHE }}
-          build-args: ${{ inputs.ARGS }}
+          build-args: |
+            APP_ENV=${{ inputs.APP_ENV }}
+            NPM_TOKEN="${{ secrets.NPM_TOKEN }}"
           cache-repository: ${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/kaniko-cache
