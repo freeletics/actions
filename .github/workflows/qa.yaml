@@ -1,0 +1,109 @@
+name: Deploy to QA
+
+on:
+  workflow_call:
+    inputs:
+      env_name:
+        required: true
+        type: string
+      AWS_ECR_ENV_NAME:
+        required: false
+        type: string
+        default: "prod"
+      AWS_REGION:
+        required: true
+        type: string
+      AWS_ACCOUNT_ID:
+        required: true
+        type: string
+        
+permissions:
+  id-token: write
+  contents: read
+  actions: write
+
+
+env:
+  RELEASE_NAME: my-release
+  AWS_REGION: eu-west-1
+  AURORA_POSTGRES_SECRET: my-secret-id
+  CHART_BRANCH: main
+  BUILD_LOCAL: true
+  AWS_ECR_ENV_NAME: "prod"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up Kubernetes CLI
+        uses: azure/setup-kubectl@v1
+        with:
+          version: 'latest'
+        
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1.7.0
+        with:
+          role-to-assume: arn:aws:iam::${{ inputs.AWS_ACCOUNT_ID }}:role/github-actions/fl-${{ env.AWS_ECR_ENV_NAME }}-${{ github.event.repository.name }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Get Postgres password
+        run: |
+          export POSTGRES_PASSWORD=$(aws secretsmanager get-secret-value --secret-id ${{ env.AURORA_POSTGRES_SECRET }} | \
+            jq -rc '.SecretString | fromjson | .password')
+
+      - name: Run kubectl create
+        run: kubectl get namespace "${env.RELEASE_NAME}" 2>&1 >/dev/null || (kubectl create namespace "${env.RELEASE_NAME}"; kubectl label namespace "${env.RELEASE_NAME}" environment=qa)
+
+      - name: Check out code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          repository: 'freeletics/fl-orchestration'
+          path: 'charts'
+          ref: '${{ env.CHART_BRANCH }}'
+          token: ${{ secrets.JENKINS_PAT_FLUXCD }}
+
+      - name: Merge rails-app and fl-qa helm charts
+        run: mkdir -p fl-qa/charts/ && cp -r rails-app fl-qa/charts/
+
+      - name: Helm pre-deploy
+        run: |
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo add freeletics-helm-charts s3://freeletics-helm-charts/charts
+          cd fl-qa/charts/ && helm dep up
+
+      - name: Perl replace values
+        run: |
+            cat values.yaml.template | \
+            perl -p -e 's/\$\{([^}]+)\}/defined $ENV{$1} ? $ENV{$1} : $&/eg; s/\$\{([^}]+)\}//eg' > \
+            "values_${{ env.RELEASE_NAME}}.yaml"
+
+      - name: Helm template
+        run: |
+            helm template \
+            -f "values_${{ env.RELEASE_NAME}}.yaml" \
+            "${{ env.RELEASE_NAME }}" . > /dev/null
+
+      - name: 'Deploy'
+        uses: 'deliverybot/helm@v1'
+        with:
+          release: '${{ env.RELEASE_NAME }}'
+          namespace: '${{ env.RELEASE_NAME }}'
+          timeout: '10m'
+          chart: 'charts/fl-qa'
+          token: '${{ github.token }}'
+          value-files: >-
+          [
+            "values_${{ env.RELEASE_NAME }}.yaml", 
+          ]
+        env:
+          KUBECONFIG_FILE: '${{ secrets.KUBECONFIG }}'
+
+
+
+   
