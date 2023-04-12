@@ -97,10 +97,7 @@ jobs:
           timeout: '10m'
           chart: 'charts/fl-qa'
           token: '${{ github.token }}'
-          value-files: >-
-          [
-            "values_${{ env.RELEASE_NAME }}.yaml", 
-          ]
+          value-files: ["values_${{ env.RELEASE_NAME }}.yaml"]
         env:
           KUBECONFIG_FILE: '${{ secrets.KUBECONFIG }}'
 
