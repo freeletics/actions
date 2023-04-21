@@ -45,10 +45,10 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1.5.3
 
-  test:
-    needs: login
-    runs-on: ubuntu-latest
-    container:
-      image: ${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/helm-tests:gha-latest-master
-    steps:
-      - run: echo "Inside a container pulled from ECR \o/"
+      - name: Run ubuntu from dockerhub
+        uses: tj-actions/docker-run@v2
+        with:
+          image: ${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/helm-tests:gha-latest-master
+          name: helm-tests
+          args: |
+            echo "Inside a container pulled from ECR \o/"
