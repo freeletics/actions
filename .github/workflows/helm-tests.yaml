@@ -55,4 +55,4 @@ jobs:
           name: helm-tests
           args: |
             ${{ inputs.COMMAND }}
-          options: --workdir=/helm-charts -v $(pwd)/:/helm-charts -v $(pwd)/ct:/ct -v $(pwd)/logs:/testlogs
+          options: --workdir=/
