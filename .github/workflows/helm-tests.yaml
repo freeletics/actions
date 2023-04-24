@@ -16,6 +16,9 @@ on:
       AWS_ACCOUNT_ID:
         required: true
         type: string
+      COMMAND:
+        required: true
+        type: string
 
 permissions:
   id-token: write
@@ -23,7 +26,7 @@ permissions:
   actions: write
 
 jobs:
-  login:
+  run_tests:
     runs-on: ubuntu-latest
     steps:
       - name: Skip Duplicate Actions
@@ -34,6 +37,8 @@ jobs:
 
       - name: Check out code
         uses: actions/checkout@v3
+        with:
+          path: myrepo
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v1.7.0
@@ -51,4 +56,9 @@ jobs:
           image: ${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/helm-tests:gha-latest-master
           name: helm-tests
           args: |
-            echo "Inside a container pulled from ECR \o/"
+            ${{ inputs.COMMAND }}
+          options: |
+            --workdir=/helm-charts
+            -v $(pwd)/myrepo:/helm-charts
+            -v $(pwd)/ct:/ct
+            -v $(pwd)/logs:/testlogs
