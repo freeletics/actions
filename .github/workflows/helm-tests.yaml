@@ -56,6 +56,6 @@ jobs:
           args: |
             ${{ inputs.COMMAND }}
           options: |
-            -v $(pwd)/:/helm-charts
-            -v $(pwd)/ct:/ct
+            -v $(pwd)/:/helm-charts \
+            -v $(pwd)/ct:/ct \
             -v $(pwd)/logs:/testlogs
