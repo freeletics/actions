@@ -51,11 +51,18 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1.5.3
 
-      - name: Run ubuntu from dockerhub
-        uses: tj-actions/docker-run@v2
-        with:
-          image: ${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/helm-tests:gha-latest-master
-          name: helm-tests
-          args: |
-            ${{ inputs.COMMAND }}
-          options: --workdir=/helm-charts -v $(pwd)/myrepo:/helm-charts -v $(pwd)/myrepo/ct:/ct -v $(pwd)/logs:/testlogs
+      - name: Install helm
+        uses: azure/setup-helm@v3
+        id: install
+
+      - name: Set up chart-testing
+        uses: helm/chart-testing-action@v2.4.0
+
+      - name: Run tests
+        shell: bash
+        run: |
+          wget https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz \
+            && tar xf kubeconform-linux-amd64.tar.gz \
+            && mv kubeconform /usr/local/bin/kubeconform
+          cd myrepo; ${{ inputs.COMMAND }}
+        
