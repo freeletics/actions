@@ -1,12 +1,7 @@
 name: "Just a test"
 
 on:
-  pull_request:
-    types: [opened, reopened]
   push:
-    branches: ["master"]
-    tags:
-      - "*"
 
 permissions:
   id-token: write
