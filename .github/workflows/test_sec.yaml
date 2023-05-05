@@ -1,7 +1,8 @@
 name: "Just a test - On all push"
 
 on:
-  push:
+  pull_request:
+    types: [opened, reopened]
 
 permissions:
   id-token: write
