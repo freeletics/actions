@@ -1,4 +1,4 @@
-name: "Just a test !"
+name: "Just a test - On all push"
 
 on:
   push:
