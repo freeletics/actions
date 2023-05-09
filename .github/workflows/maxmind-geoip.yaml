@@ -22,6 +22,8 @@ jobs:
 
       - name: MaxMind Compress files
         run: |
+          ls -lhatr
+          ls -lhatr /usr/share/GeoIP
           cd ${{ github.workspace }}
           gzip -c GeoLite2-Country.mmdb > GeoLite2-Country.mmdb.gz
           gzip -c GeoLite2-City.mmdb > GeoLite2-City.mmdb.gz
