@@ -16,7 +16,7 @@ jobs:
         with:
           args: geoipupdate -f ${{ secrets.MAXMIND_GEOIP_CONFIG_FILE }} -d ${{ github.workspace }}
 
-      - name: MaxMind: Compress files
+      - name: MaxMind Compress files
         run: |
           cd ${{ github.workspace }}
           gzip -c GeoLite2-Country.mmdb > GeoLite2-Country.mmdb.gz
