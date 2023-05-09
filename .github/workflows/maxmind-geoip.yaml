@@ -11,7 +11,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: MaxMind: GeoIP Update
+      - name: MaxMind GeoIP Update
         uses: docker://maxmindinc/geoipupdate:v4.6
         with:
           args: geoipupdate -f ${{ secrets.MAXMIND_GEOIP_CONFIG_FILE }} -d ${{ github.workspace }}
