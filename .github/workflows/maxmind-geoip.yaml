@@ -18,8 +18,7 @@ jobs:
           GEOIPUPDATE_ACCOUNT_ID: ${{ secrets.MAXMIND_ACCOUNT_ID }}
           GEOIPUPDATE_LICENSE_KEY: ${{ secrets.MAXMIND_LICENSE_KEY }}
           GEOIPUPDATE_EDITION_IDS: "GeoLite2-Country GeoLite2-City"
-        with:
-          args: geoipupdate -d ${{ github.workspace }} -a -v
+          GEOIPUPDATE_DB_DIR: ${{ github.workspace }}
 
       - name: MaxMind Compress files
         run: |
