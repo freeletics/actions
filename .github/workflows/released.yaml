@@ -13,7 +13,7 @@ jobs:
     name: Build Docker image
     runs-on: ubuntu-latest
     steps:
-      ##### Git versions ####
+      ##### Git versions #### 
       - name: Check out code
         uses: actions/checkout@v3
         if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
