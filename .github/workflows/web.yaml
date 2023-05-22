@@ -16,14 +16,14 @@ on:
       AWS_ACCOUNT_ID:
         required: true
         type: string
-      KANIKO_CACHE:
-        required: false
-        type: boolean
-        default: true
       APP_ENV:
         required: false
         type: string
         default: "staging"
+      DOCKERFILE:
+        required: false
+        type: string
+        default: "Dockerfile"
 
 permissions:
   id-token: write
@@ -77,7 +77,8 @@ jobs:
           push: true
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}
-          cache: ${{ inputs.KANIKO_CACHE }}
+          cache: true
+          file: "${{ inputs.DOCKERFILE }}"
           build-args: |
             APP_ENV=${{ inputs.APP_ENV }}
             NPM_TOKEN="${{ secrets.NPM_TOKEN }}"
