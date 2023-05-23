@@ -91,9 +91,9 @@ jobs:
         run: echo "date=$(date +'%s')" >> $GITHUB_OUTPUT
 
         # for tag we use gha-prod
-        # for intgration get a new image tag with date of today; then a webhook will notify Flux of changes
+        # for integration get a new image tag with date of today; then a webhook will notify Flux of changes
       - uses: docker/metadata-action@v4.1.1
-        name: Generate tags
+        name: Generate default tags
         if: ${{ inputs.DEPLOY == false }}
         id: metadata
         with:
@@ -105,7 +105,7 @@ jobs:
             type=ref,enable=true,priority=600,prefix=gha-,suffix=,event=pr
 
       - uses: docker/metadata-action@v4.1.1
-        name: Generate tags
+        name: Generate DEPLOY tags
         if: ${{ inputs.DEPLOY == true }}
         id: metadata_deploy
         with:
@@ -117,11 +117,11 @@ jobs:
       - uses: int128/kaniko-action@v1.14.0
         name: Build with Kaniko
         with:
-          push: true
           tags: ${{ inputs.DEPLOY == true && steps.metadata_deploy.outputs.tags || steps.metadata.outputs.tags }}
           labels: ${{ inputs.DEPLOY == true && steps.metadata_deploy.outputs.labels || steps.metadata.outputs.labels }}
-          cache: true
           file: "${{ inputs.DOCKERFILE }}"
+          cache: true
+          push: true
           build-args: |
             APP_ENV=${{ inputs.APP_ENV }}
             NPM_TOKEN="${{ secrets.NPM_TOKEN }}"
