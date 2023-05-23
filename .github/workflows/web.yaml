@@ -94,7 +94,7 @@ jobs:
         # for intgration get a new image tag with date of today; then a webhook will notify Flux of changes
       - uses: docker/metadata-action@v4.1.1
         name: Generate tags
-        if: ${{ inputs.DEPLOY }} == false
+        if: ${{ inputs.DEPLOY == false }}
         id: metadata
         with:
           images: ${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/${{ github.event.repository.name }}
@@ -106,8 +106,8 @@ jobs:
 
       - uses: docker/metadata-action@v4.1.1
         name: Generate tags
-        if: ${{ inputs.DEPLOY }} == true
-        id: metadata
+        if: ${{ inputs.DEPLOY == true }}
+        id: metadata_deploy
         with:
           images: ${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/${{ github.event.repository.name }}
           tags: |
@@ -118,8 +118,8 @@ jobs:
         name: Build with Kaniko
         with:
           push: true
-          tags: ${{ steps.metadata.outputs.tags }}
-          labels: ${{ steps.metadata.outputs.labels }}
+          tags: ${{ inputs.DEPLOY == true && steps.metadata_deploy.outputs.tags || steps.metadata.outputs.tags }}
+          labels: ${{ inputs.DEPLOY == true && steps.metadata_deploy.outputs.labels || steps.metadata.outputs.labels }}
           cache: true
           file: "${{ inputs.DOCKERFILE }}"
           build-args: |
