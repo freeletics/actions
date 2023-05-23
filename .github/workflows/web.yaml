@@ -44,6 +44,34 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v3
 
+      - name: Cache yarn modules
+        id: cache-yarn
+        uses: actions/cache@v3
+        with:
+          path: |
+            node_modules
+            public
+          key: ${{ runner.os }}-build-web-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-build-web-
+
+      - name: Use Node.js
+        uses: actions/setup-node@v1
+        with:
+          node-version: '18.12.1'
+
+      - name: Login to NPM 
+        run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" >> .npmrc
+
+      - name: Install deps
+        run: yarn install
+          
+      - name: Build
+        run: yarn build
+        env:
+          NODE_ENV: "production"
+          CI: false
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v1.7.0
         with:
