@@ -1,4 +1,4 @@
-name: "Docker Build with Kaniko"
+name: "Web Build with Docker Kaniko"
 
 on:
   workflow_call:
