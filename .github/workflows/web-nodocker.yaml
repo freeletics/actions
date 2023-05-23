@@ -52,6 +52,21 @@ jobs:
       - name: Login to NPM 
         run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" >> .npmrc
 
+      - name: Cache yarn modules
+        id: cache-yarn
+        uses: actions/cache@v3
+        env:
+          cache-name: cache-yarn-modules
+        with:
+          path: |
+            node_modules
+            public
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ env.cache-name }}-
+            ${{ runner.os }}-build-
+            ${{ runner.os }}-
+
       - name: Install deps
         run: yarn install
           
