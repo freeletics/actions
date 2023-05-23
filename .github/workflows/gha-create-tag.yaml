@@ -47,31 +47,31 @@ jobs:
               ref: "refs/tags/deploy-prod-${{ steps.date.outputs.date }}",
               sha: context.sha
             })
+      # adding this here so if the repo doe not have the release workflow it will update here
+      ##### Git versions ####
+      - name: Check out code
+        uses: actions/checkout@v3
+        if: github.event.inputs.deploy == 'true'
+        with:
+          fetch-depth: 0
+          repository: 'freeletics/releases'
+          path: 'releases'
+          ref: 'main'
+          token: ${{ secrets.JENKINS_PAT_FLUXCD }}
 
-      # ##### Git versions ####
-      # - name: Check out code
-      #   uses: actions/checkout@v3
-      #   if: github.event.inputs.deploy == 'true'
-      #   with:
-      #     fetch-depth: 0
-      #     repository: 'freeletics/releases'
-      #     path: 'releases'
-      #     ref: 'main'
-      #     token: ${{ secrets.JENKINS_PAT_FLUXCD }}
 
+      - name: Create versions.yaml
+        uses: mikefarah/yq@v4.30.5
+        if: github.event.inputs.deploy == 'true'
+        with:
+          cmd: yq -i e '.${{ github.event.repository.name }} = "${{ steps.date.outputs.date }}"' releases/versions.yaml
 
-      # - name: Create versions.yaml
-      #   uses: mikefarah/yq@v4.30.5
-      #   if: github.event.inputs.deploy == 'true'
-      #   with:
-      #     cmd: yq -i e '.${{ github.event.repository.name }} = "${{ steps.date.outputs.date }}"' releases/versions.yaml
-
-      # - name: Push versions.yaml back
-      #   if: github.event.inputs.deploy == 'true'
-      #   run: |
-      #     cd releases
-      #     git config user.name github-actions
-      #     git config user.email github-actions@github.com
-      #     git add versions.yaml
-      #     git commit -m "${{ github.event.repository.name }} BUMP"
-      #     git push
+      - name: Push versions.yaml back
+        if: github.event.inputs.deploy == 'true'
+        run: |
+          cd releases
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add versions.yaml
+          git commit -m "${{ github.event.repository.name }} BUMP"
+          git push
