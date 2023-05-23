@@ -32,7 +32,7 @@ jobs:
       - name: Get current date
         if: github.event.inputs.deploy == 'true'
         id: date
-        run: echo "date=$(date +'%Y-%m-%d_%H-%M')" >> $GITHUB_OUTPUT
+        run: echo "date=$(date +'%Y-%m-%d-%H-%M-%S')" >> $GITHUB_OUTPUT
 
 
       - name: Create tag
@@ -44,11 +44,11 @@ jobs:
             github.rest.git.createRef({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              ref: "refs/tags/gha-prod-${{ steps.date.outputs.date }}",
+              ref: "refs/tags/deploy-prod-${{ steps.date.outputs.date }}",
               sha: context.sha
             })
-
-      ##### Git versions #### 
+      # adding this here so if the repo doe not have the release workflow it will update here
+      ##### Git versions ####
       - name: Check out code
         uses: actions/checkout@v3
         if: github.event.inputs.deploy == 'true'
