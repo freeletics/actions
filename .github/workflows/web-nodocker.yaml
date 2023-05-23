@@ -70,6 +70,7 @@ jobs:
         run: yarn build
         env:
           NODE_ENV: "production"
+          CI: false
 
       # - name: Configure AWS credentials
       #   uses: aws-actions/configure-aws-credentials@v1.7.0
