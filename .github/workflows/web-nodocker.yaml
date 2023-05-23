@@ -59,7 +59,7 @@ jobs:
           path: |
             node_modules
             public
-          key: ${{ runner.os }}-build-web-${{ hashFiles('yarn.lock') }}
+          key: ${{ runner.os }}-build-web-${{ github.run_id }}
           restore-keys: |
             ${{ runner.os }}-build-web-
 
