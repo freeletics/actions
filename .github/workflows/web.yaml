@@ -92,6 +92,9 @@ jobs:
 
       - name: Login to NPM 
         run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" >> .npmrc
+        
+      - name: LS
+        run: ls -lhatr
 
       - name: Install deps
         run: |
