@@ -39,6 +39,9 @@ on:
         required: false
         type: boolean
         default: false
+      CONTEXT:
+        required: false
+        type: string
 
 permissions:
   id-token: write
@@ -161,6 +164,7 @@ jobs:
           labels: ${{ steps.metadata_qa.outputs.labels }}
           file: "${{ inputs.DOCKERFILE }}"
           cache: true
+          context: "${{ inputs.CONTEXT != '' && inputs.CONTEXT || github.workspace }}"
           push: true
           build-args: |
             APP_ENV=${{ inputs.APP_ENV }}
