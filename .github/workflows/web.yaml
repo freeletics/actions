@@ -20,6 +20,9 @@ on:
         required: false
         type: string
         default: "staging"
+      BRANCH:
+        required: false
+        type: string
       DOCKERFILE:
         required: false
         type: string
@@ -47,6 +50,9 @@ jobs:
 
       - name: Check out code
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          ref: '${{ github.event.input.BRANCH != '' && github.event.input.BRANCH || GITHUB_REF_NAME }}'
 
       - name: Cache yarn modules
         id: cache-yarn
