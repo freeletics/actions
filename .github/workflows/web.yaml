@@ -68,6 +68,7 @@ jobs:
           fetch-depth: 0
           repository: 'freeletics/web-service-main'
           path: 'web-service-main'
+          token: ${{ secrets.JENKINS_PAT_FLUXCD }}
           ref: "${{ github.event.input.BRANCH != '' && github.event.input.BRANCH || github.ref_name }}"
 
       - name: Check out code
