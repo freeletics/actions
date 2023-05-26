@@ -2,6 +2,10 @@ name: "Web Build with Docker Kaniko"
 
 on:
   workflow_call:
+    outputs:
+      IMAGE_TAG:
+        description: "the image tag"
+        value: ${{ jobs.build.outputs.IMAGE_TAG }}
     inputs:
       env_name:
         type: string
@@ -31,6 +35,10 @@ on:
         required: false
         type: boolean
         default: false
+      QA:
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   id-token: write
@@ -39,6 +47,8 @@ permissions:
 
 jobs:
   build:
+    outputs:
+      IMAGE_TAG: ${{ steps.IMAGE_TAG.outputs.IMAGE_TAG }}
     name: Build Docker image
     runs-on: ubuntu-latest
     steps:
@@ -95,6 +105,15 @@ jobs:
       - name: Get Today's Unix timestamp
         id: timestamp
         run: echo "date=$(date +'%s')" >> $GITHUB_OUTPUT
+        
+      - uses: docker/metadata-action@v4.1.1
+        name: Generate default tags
+        if: ${{ inputs.QA == true }}
+        id: metadata_qa
+        with:
+          images: ${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/${{ github.event.repository.name }}
+          tags: |
+            type=sha,enable=true,priority=600,prefix=gha-,suffix=
 
         # for tag we use gha-prod
         # for integration get a new image tag with date of today; then a webhook will notify Flux of changes
@@ -121,10 +140,32 @@ jobs:
             type=raw,enable=true,priority=600,prefix=gha-deploy-int-,value=${{ steps.timestamp.outputs.date }}
 
       - uses: int128/kaniko-action@v1.14.0
+        if: ${{ inputs.QA == false }}
         name: Build with Kaniko
         with:
           tags: ${{ inputs.DEPLOY == true && steps.metadata_deploy.outputs.tags || steps.metadata.outputs.tags }}
           labels: ${{ inputs.DEPLOY == true && steps.metadata_deploy.outputs.labels || steps.metadata.outputs.labels }}
+          file: "${{ inputs.DOCKERFILE }}"
+          cache: true
+          push: true
+          build-args: |
+            APP_ENV=${{ inputs.APP_ENV }}
+            NPM_TOKEN="${{ secrets.NPM_TOKEN }}"
+          cache-repository: ${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/kaniko-cache
+          
+      - name: Get the tag for QA
+        if: ${{ inputs.QA == true }}
+        id: IMAGE_TAG
+        run: |
+          IMAGETAG=$( echo "${{ steps.metadata_qa.outputs.tags }}" | awk -F ":" '{print $2}')
+          echo "IMAGE_TAG=$IMAGETAG" >> $GITHUB_OUTPUT
+          
+      - uses: int128/kaniko-action@v1.14.0
+        name: Build with Kaniko if QA
+        if: ${{ inputs.QA == true }}
+        with:
+          tags: ${{ steps.metadata_qa.outputs.tags  }}
+          labels: ${{ steps.metadata_qa.outputs.labels }}
           file: "${{ inputs.DOCKERFILE }}"
           cache: true
           push: true
