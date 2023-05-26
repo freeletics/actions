@@ -61,16 +61,6 @@ jobs:
           concurrent_skipping: "same_content"
           cancel_others: "true"
           
-      - name: Check out code QA
-        if: ${{ inputs.QA == true }}
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-          repository: 'freeletics/web-service-main'
-          path: 'web-service-main'
-          token: ${{ secrets.JENKINS_PAT_FLUXCD }}
-          ref: "${{ inputs.BRANCH }}"
-
       - name: Check out code
         uses: actions/checkout@v3
 
@@ -93,22 +83,12 @@ jobs:
       - name: Login to NPM 
         run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" >> .npmrc
         
-      - name: LS
-        run: ls -lhatr
 
       - name: Install deps
-        run: |
-          if [[ -n "${{ inputs.CONTEXT }}" ]]; then
-            cd "${{ inputs.CONTEXT }}"
-          fi
-          yarn install
+        run: yarn install
           
       - name: Build
-        run: |
-          if [[ -n "${{ inputs.CONTEXT }}" ]]; then
-            cd "${{ inputs.CONTEXT }}"
-          fi
-          yarn build
+        run: yarn build
         env:
           NODE_ENV: "production"
           CI: false
@@ -174,24 +154,3 @@ jobs:
             NPM_TOKEN="${{ secrets.NPM_TOKEN }}"
           cache-repository: ${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/kaniko-cache
           
-      - uses: int128/kaniko-action@v1.14.0
-        name: Build with Kaniko if QA
-        if: ${{ inputs.QA == true }}
-        with:
-          tags: ${{ steps.metadata_qa.outputs.tags  }}
-          labels: ${{ steps.metadata_qa.outputs.labels }}
-          file: "${{ inputs.DOCKERFILE }}"
-          cache: true
-          context: "${{ inputs.CONTEXT != '' && inputs.CONTEXT || github.workspace }}"
-          push: true
-          build-args: |
-            APP_ENV=${{ inputs.APP_ENV }}
-            NPM_TOKEN="${{ secrets.NPM_TOKEN }}"
-          cache-repository: ${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/kaniko-cache
-          
-      - name: Get the tag for QA
-        if: ${{ inputs.QA == true }}
-        id: IMAGE_TAG
-        run: |
-          IMAGETAG=$( echo "${{ steps.metadata_qa.outputs.tags }}" | awk -F ":" '{print $2}')
-          echo "IMAGE_TAG=$IMAGETAG" >> $GITHUB_OUTPUT
