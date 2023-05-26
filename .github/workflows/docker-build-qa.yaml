@@ -1,0 +1,81 @@
+name: "Docker Build with Kaniko"
+
+on:
+  workflow_call:
+    outputs:
+      IMAGE_TAG:
+        description: "the image tag"
+        value: ${{ jobs.build.outputs.IMAGE_TAG }}
+    inputs:
+      env_name:
+        type: string
+        required: false
+      AWS_ECR_ENV_NAME:
+        required: false
+        type: string
+        default: "prod"
+      AWS_REGION:
+        required: true
+        type: string
+      AWS_ACCOUNT_ID:
+        required: true
+        type: string
+      KANIKO_CACHE:
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  id-token: write
+  contents: read
+  actions: write
+
+jobs:
+  build:
+    outputs:
+      IMAGE_TAG: ${{ steps.IMAGE_TAG.outputs.IMAGE_TAG }}
+    name: Build Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip Duplicate Actions
+        uses: fkirc/skip-duplicate-actions@v5.2.0
+        with:
+          concurrent_skipping: "same_content"
+          cancel_others: "true"
+
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1.7.0
+        with:
+          role-to-assume: arn:aws:iam::${{ inputs.AWS_ACCOUNT_ID }}:role/github-actions/fl-${{ inputs.AWS_ECR_ENV_NAME }}-${{ github.event.repository.name }}
+          aws-region: ${{ inputs.AWS_REGION }}
+
+      - name: Login to Amazon ECR Private
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1.5.3
+
+      - uses: docker/metadata-action@v4.1.1
+        name: Generate tags
+        id: metadata
+        with:
+          images: ${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/${{ github.event.repository.name }}
+          tags: |
+            type=sha,enable=true,priority=600,prefix=gha-,suffix=
+
+      - uses: int128/kaniko-action@v1.14.0
+        name: Build with Kaniko
+        with:
+          push: true
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}
+          cache: ${{ inputs.KANIKO_CACHE }}
+          cache-repository: ${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/kaniko-cache
+          
+      - name: Get the tag for QA
+        if: ${{ inputs.QA == true }}
+        id: IMAGE_TAG
+        run: |
+          IMAGETAG=$( echo "${{ steps.metadata_qa.outputs.tags }}" | awk -F ":" '{print $2}')
+          echo "IMAGE_TAG=$IMAGETAG" >> $GITHUB_OUTPUT
