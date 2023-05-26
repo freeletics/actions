@@ -153,13 +153,6 @@ jobs:
             NPM_TOKEN="${{ secrets.NPM_TOKEN }}"
           cache-repository: ${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/kaniko-cache
           
-      - name: Get the tag for QA
-        if: ${{ inputs.QA == true }}
-        id: IMAGE_TAG
-        run: |
-          IMAGETAG=$( echo "${{ steps.metadata_qa.outputs.tags }}" | awk -F ":" '{print $2}')
-          echo "IMAGE_TAG=$IMAGETAG" >> $GITHUB_OUTPUT
-          
       - uses: int128/kaniko-action@v1.14.0
         name: Build with Kaniko if QA
         if: ${{ inputs.QA == true }}
@@ -173,3 +166,10 @@ jobs:
             APP_ENV=${{ inputs.APP_ENV }}
             NPM_TOKEN="${{ secrets.NPM_TOKEN }}"
           cache-repository: ${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/kaniko-cache
+          
+      - name: Get the tag for QA
+        if: ${{ inputs.QA == true }}
+        id: IMAGE_TAG
+        run: |
+          IMAGETAG=$( echo "${{ steps.metadata_qa.outputs.tags }}" | awk -F ":" '{print $2}')
+          echo "IMAGE_TAG=$IMAGETAG" >> $GITHUB_OUTPUT
