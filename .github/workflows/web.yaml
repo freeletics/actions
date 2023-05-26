@@ -128,7 +128,7 @@ jobs:
         run: echo "date=$(date +'%s')" >> $GITHUB_OUTPUT
         
       - uses: docker/metadata-action@v4.1.1
-        name: Generate default tags
+        name: Generate QA tags
         if: ${{ inputs.QA == true }}
         id: metadata_qa
         with:
