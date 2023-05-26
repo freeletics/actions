@@ -52,7 +52,7 @@ jobs:
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
-          ref: "${{ github.event.input.BRANCH != '' && github.event.input.BRANCH || GITHUB_REF_NAME }}"
+          ref: "${{ github.event.input.BRANCH != '' && github.event.input.BRANCH || github.ref_name }}"
 
       - name: Cache yarn modules
         id: cache-yarn
