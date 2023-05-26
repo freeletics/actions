@@ -69,13 +69,10 @@ jobs:
           repository: 'freeletics/web-service-main'
           path: 'web-service-main'
           token: ${{ secrets.JENKINS_PAT_FLUXCD }}
-          ref: "${{ github.event.input.BRANCH != '' && github.event.input.BRANCH || github.ref_name }}"
+          ref: "${{ inputs.BRANCH }}"
 
       - name: Check out code
         uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-          ref: "${{ github.event.input.BRANCH != '' && github.event.input.BRANCH || github.ref_name }}"
 
       - name: Cache yarn modules
         id: cache-yarn
