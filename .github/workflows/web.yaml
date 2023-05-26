@@ -60,6 +60,15 @@ jobs:
         with:
           concurrent_skipping: "same_content"
           cancel_others: "true"
+          
+      - name: Check out code QA
+        if: ${{ inputs.QA == true }}
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          repository: 'freeletics/web-service-main'
+          path: 'web-service-main'
+          ref: "${{ github.event.input.BRANCH != '' && github.event.input.BRANCH || github.ref_name }}"
 
       - name: Check out code
         uses: actions/checkout@v3
