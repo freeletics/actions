@@ -87,10 +87,18 @@ jobs:
         run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" >> .npmrc
 
       - name: Install deps
-        run: yarn install
+        run: |
+          if [[ -n "${{ inputs.CONTEXT }}" ]]; then
+            cd "${{ inputs.CONTEXT }}"
+          fi
+          yarn install
           
       - name: Build
-        run: yarn build
+        run: |
+          if [[ -n "${{ inputs.CONTEXT }}" ]]; then
+            cd "${{ inputs.CONTEXT }}"
+          fi
+          yarn build
         env:
           NODE_ENV: "production"
           CI: false
