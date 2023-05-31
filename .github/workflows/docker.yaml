@@ -68,6 +68,7 @@ jobs:
       - uses: int128/kaniko-action@v1.14.0
         name: Build with Kaniko
         with:
+          # build-args: "github_access_token='${{ secrets.PRIVATE_GEMS_SECRET }}'"
           push: true
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}
