@@ -1,5 +1,10 @@
 name: "Docker Build with Kaniko"
 
+permissions:
+  id-token: write
+  contents: read
+  actions: write
+
 on:
   workflow_call:
     inputs:
@@ -20,11 +25,6 @@ on:
         required: false
         type: boolean
         default: true
-
-permissions:
-  id-token: write
-  contents: read
-  actions: write
 env:
   BUNDLE_GITHUB__COM: "${{ secrets.PRIVATE_GEMS_SECRET }}:x-oauth-basic"
 
