@@ -25,6 +25,8 @@ permissions:
   id-token: write
   contents: read
   actions: write
+env:
+  BUNDLE_GITHUB__COM: "${{ secrets.PRIVATE_GEMS_SECRET }}:x-oauth-basic"
 
 jobs:
   build:
