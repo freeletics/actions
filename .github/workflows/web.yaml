@@ -95,77 +95,22 @@ jobs:
           NODE_ENV: "production"
           CI: false
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1.7.0
+      - name: Archive production artifacts
+        uses: actions/upload-artifact@v3
         with:
-          role-to-assume: arn:aws:iam::${{ inputs.AWS_ACCOUNT_ID }}:role/github-actions/fl-${{ inputs.AWS_ECR_ENV_NAME }}-${{ github.event.repository.name }}
-          aws-region: ${{ inputs.AWS_REGION }}
+          name: dist-web-artifact
+          path: |
+            dist
+          retention-days: 5
 
-      - name: Login to Amazon ECR Private
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1.5.3
-
-      - name: Get Today's Unix timestamp
-        id: timestamp
-        run: echo "date=$(date +'%s')" >> $GITHUB_OUTPUT
-        
-      - uses: docker/metadata-action@v4.1.1
-        name: Generate QA tags
-        if: ${{ inputs.QA == true }}
-        id: metadata_qa
-        with:
-          images: ${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/${{ github.event.repository.name }}
-          tags: |
-            type=sha,enable=true,priority=600,prefix=qa-gha-,suffix=
-
-        # for tag we use gha-prod
-        # for integration get a new image tag with date of today; then a webhook will notify Flux of changes
-      - uses: docker/metadata-action@v4.1.1
-        name: Generate default tags
-        if: ${{ inputs.DEPLOY == false }}
-        id: metadata
-        with:
-          images: ${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/${{ github.event.repository.name }}
-          tags: |
-            type=sha,enable=true,priority=600,prefix=gha-,suffix=
-            type=ref,enable=true,priority=600,prefix=gha-latest-,suffix=,event=branch
-            type=ref,enable=true,priority=600,suffix=,event=tag
-            type=ref,enable=true,priority=600,prefix=gha-,suffix=,event=pr
-
-      - uses: docker/metadata-action@v4.1.1
-        name: Generate DEPLOY tags
-        if: ${{ inputs.DEPLOY == true }}
-        id: metadata_deploy
-        with:
-          images: ${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/${{ github.event.repository.name }}
-          tags: |
-            type=sha,enable=true,priority=600,prefix=gha-,suffix=
-            type=raw,enable=true,priority=600,prefix=gha-deploy-int-,value=${{ steps.timestamp.outputs.date }}
-
-      - uses: int128/kaniko-action@v1.14.0
-        if: ${{ inputs.QA == false }}
-        name: Build with Kaniko
-        with:
-          tags: ${{ inputs.DEPLOY == true && steps.metadata_deploy.outputs.tags || steps.metadata.outputs.tags }}
-          labels: ${{ inputs.DEPLOY == true && steps.metadata_deploy.outputs.labels || steps.metadata.outputs.labels }}
-          file: "${{ inputs.DOCKERFILE }}"
-          cache: true
-          push: true
-          build-args: |
-            APP_ENV=${{ inputs.APP_ENV }}
-            NPM_TOKEN="${{ secrets.NPM_TOKEN }}"
-          cache-repository: ${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/kaniko-cache
-
-      - uses: int128/kaniko-action@v1.14.0
-        if: ${{ inputs.QA == true }}
-        name: Build with Kaniko QA
-        with:
-          tags: ${{ steps.metadata_qa.outputs.tags }}
-          labels: ${{ steps.metadata_qa.outputs.labels }}
-          file: "${{ inputs.DOCKERFILE }}"
-          cache: true
-          push: true
-          build-args: |
-            APP_ENV=${{ inputs.APP_ENV }}
-            NPM_TOKEN="${{ secrets.NPM_TOKEN }}"
-          cache-repository: ${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/kaniko-cache
+  docker:
+    permissions:
+      id-token: write
+      contents: read
+      actions: write
+    uses: freeletics/actions/.github/workflows/docker.yaml@main #this has to be public
+    with:
+      ARTIFACTS_NAME: "dist-web-artifact"
+      AWS_REGION: "eu-west-1"
+      AWS_ACCOUNT_ID: "524690225562"
+    secrets: inherit
