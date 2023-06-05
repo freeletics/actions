@@ -74,9 +74,9 @@ jobs:
           path: |
             node_modules
             public
-          key: ${{ runner.os }}-build-web-${{ github.run_id }}
+          key: ${{ runner.os }}-${{ inputs.APP_ENV }}-build-web-${{ github.run_id }}
           restore-keys: |
-            ${{ runner.os }}-build-web-
+            ${{ runner.os }}-${{ inputs.APP_ENV }}-build-web-
 
       - name: Use Node.js
         uses: actions/setup-node@v1
