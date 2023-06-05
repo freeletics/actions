@@ -3,6 +3,13 @@ name: "Docker Build with Kaniko"
 on:
   workflow_call:
     inputs:
+      ARTIFACTS_NAME:
+        type: string
+        required: false
+      DOCKERFILE:
+        type: string
+        required: false
+        default: "Dockerfile"
       env_name:
         type: string
         required: false
@@ -40,6 +47,13 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v3
 
+      - name: Download artifacts
+        if: ${{ inputs.ARTIFACTS_NAME != '' }}
+        uses: actions/download-artifact@v3
+        with:
+          name: ${{ inputs.ARTIFACTS_NAME }}
+          path: ${{ github.workspace }}/${{ inputs.ARTIFACTS_NAME }}
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v1.7.0
         with:
@@ -67,6 +81,7 @@ jobs:
         name: Build with Kaniko
         with:
           push: true
+          file: "${{ inputs.DOCKERFILE }}"
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}
           cache: ${{ inputs.KANIKO_CACHE }}
