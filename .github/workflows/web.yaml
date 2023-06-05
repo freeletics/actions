@@ -111,7 +111,7 @@ jobs:
       actions: write
     uses: freeletics/actions/.github/workflows/docker.yaml@web-workflow-idea #this has to be public
     with:
-      ARTIFACTS_NAME: "dist-web-artifact"
+      ARTIFACTS_NAME: "dist"
       AWS_REGION: "eu-west-1"
       AWS_ACCOUNT_ID: "524690225562"
     secrets: inherit
