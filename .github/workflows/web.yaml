@@ -129,7 +129,7 @@ jobs:
           tags: |
             type=sha,enable=true,priority=600,prefix=gha-,suffix=
             type=ref,enable=true,priority=600,prefix=gha-latest-,suffix=,event=branch
-            type=ref,enable=true,priority=600,prefix=gha-deploy-prod-,suffix=,event=tag
+            type=ref,enable=true,priority=600,suffix=,event=tag
             type=ref,enable=true,priority=600,prefix=gha-,suffix=,event=pr
 
       - uses: docker/metadata-action@v4.1.1
