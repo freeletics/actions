@@ -108,7 +108,7 @@ jobs:
       id-token: write
       contents: read
       actions: write
-    uses: freeletics/actions/.github/workflows/docker.yaml@main #this has to be public
+    uses: freeletics/actions/.github/workflows/docker.yaml@web-workflow-idea #this has to be public
     with:
       ARTIFACTS_NAME: "dist-web-artifact"
       AWS_REGION: "eu-west-1"
