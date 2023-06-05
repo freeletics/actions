@@ -73,11 +73,27 @@ jobs:
 
   docker:
     needs: build
+    if: always()
     permissions:
       id-token: write
       contents: read
       actions: write
     uses: freeletics/actions/.github/workflows/docker.yaml@main #this has to be public
+    with:
+      ARTIFACTS_NAME: "dist"
+      DOCKERFILE: "Dockerfile.gha"
+      AWS_REGION: "eu-west-1"
+      AWS_ACCOUNT_ID: "524690225562"
+    secrets: inherit
+
+  integration:
+    if: contains(github.ref, 'refs/heads/')
+    needs: build
+    permissions:
+      id-token: write
+      contents: read
+      actions: write
+    uses: freeletics/actions/.github/workflows/gha-auto-deploy-integration.yaml@main
     with:
       ARTIFACTS_NAME: "dist"
       DOCKERFILE: "Dockerfile.gha"
