@@ -82,7 +82,6 @@ jobs:
 
       - name: Login to NPM 
         run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" >> .npmrc
-        
 
       - name: Install deps
         run: yarn install
@@ -153,4 +152,17 @@ jobs:
             APP_ENV=${{ inputs.APP_ENV }}
             NPM_TOKEN="${{ secrets.NPM_TOKEN }}"
           cache-repository: ${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/kaniko-cache
-          
+
+      - uses: int128/kaniko-action@v1.14.0
+        if: ${{ inputs.QA == true }}
+        name: Build with Kaniko QA
+        with:
+          tags: ${{ steps.metadata_qa.outputs.tags }}
+          labels: ${{ steps.metadata_qa.outputs.labels }}
+          file: "${{ inputs.DOCKERFILE }}"
+          cache: true
+          push: true
+          build-args: |
+            APP_ENV=${{ inputs.APP_ENV }}
+            NPM_TOKEN="${{ secrets.NPM_TOKEN }}"
+          cache-repository: ${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/kaniko-cache
