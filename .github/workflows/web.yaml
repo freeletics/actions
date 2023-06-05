@@ -116,7 +116,7 @@ jobs:
         with:
           images: ${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/${{ github.event.repository.name }}
           tags: |
-            type=sha,enable=true,priority=600,prefix=gha-,suffix=
+            type=sha,enable=true,priority=600,prefix=qa-gha-,suffix=
 
         # for tag we use gha-prod
         # for integration get a new image tag with date of today; then a webhook will notify Flux of changes
