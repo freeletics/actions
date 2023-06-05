@@ -76,6 +76,7 @@ jobs:
         name: Build with Kaniko
         with:
           push: true
+          file: "Dockerfile.gha"
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}
           cache: ${{ inputs.KANIKO_CACHE }}
