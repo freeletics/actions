@@ -32,7 +32,7 @@ jobs:
         uses: mikefarah/yq@v4.30.5
         if: github.event_name == 'push' && contains(github.ref, 'refs/tags/') && inputs.prefix != ''
         with:
-          cmd: yq -i e '.${{ github.event.repository.name }} = "${{ inputs.prefix }}-${{ github.ref_name }}"' releases/versions.yaml
+          cmd: yq -i e '.${{ github.event.repository.name }} = "${{ github.ref_name }}"' releases/versions.yaml
           
       - name: Create versions.yaml
         uses: mikefarah/yq@v4.30.5
