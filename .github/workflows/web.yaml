@@ -104,6 +104,7 @@ jobs:
           retention-days: 5
 
   docker:
+    needs: build
     permissions:
       id-token: write
       contents: read
