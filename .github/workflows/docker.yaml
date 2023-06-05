@@ -6,6 +6,10 @@ on:
       ARTIFACTS_NAME:
         type: string
         required: false
+      DOCKERFILE:
+        type: string
+        required: false
+        default: "Dockerfile"
       env_name:
         type: string
         required: false
@@ -77,7 +81,7 @@ jobs:
         name: Build with Kaniko
         with:
           push: true
-          file: "Dockerfile.gha"
+          file: "${{ inputs.DOCKERFILE }}"
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}
           cache: ${{ inputs.KANIKO_CACHE }}
