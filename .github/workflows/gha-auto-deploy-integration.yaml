@@ -3,13 +3,12 @@ name: "Auto Deploy integration"
 on:
   workflow_call:
     inputs:
-      APP_ENV:
-        required: false
+      ARTIFACTS_NAME:
         type: string
-        default: "staging"
+        required: false
       DOCKERFILE:
-        required: false
         type: string
+        required: false
         default: "Dockerfile"
       AWS_ECR_ENV_NAME:
         required: false
