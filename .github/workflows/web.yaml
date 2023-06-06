@@ -73,7 +73,7 @@ jobs:
 
   docker:
     needs: build
-    if: always()
+    if: contains(github.ref, 'refs/tags/') || contains(github.ref, 'refs/pull/')
     permissions:
       id-token: write
       contents: read
