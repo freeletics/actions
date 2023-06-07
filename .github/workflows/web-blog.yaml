@@ -65,8 +65,8 @@ jobs:
 
       - name: Compress Artifacts
         run: |
-          tar -czf public.tar.gz public
           cp Docker/sitemap-index-blog.xml public/
+          tar -czf public.tar.gz public
 
       - name: Archive production artifacts
         uses: actions/upload-artifact@v3
