@@ -57,7 +57,7 @@ jobs:
 
       - name: Uncompress Artifacts
         if: ${{ inputs.ARTIFACTS_COMPRESSED == true }}
-        run: tar -xzf ${{ github.workspace }}/${{ inputs.ARTIFACTS_NAME }} -C ${{ github.workspace }}
+        run: tar -xzf ${{ github.workspace }}/${{ inputs.ARTIFACTS_NAME }}/${{ inputs.ARTIFACTS_NAME }}.tar.gz -C ${{ github.workspace }}
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v1.7.0
