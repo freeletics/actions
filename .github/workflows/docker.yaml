@@ -3,6 +3,9 @@ name: "Docker Build with Kaniko"
 on:
   workflow_call:
     inputs:
+      BUILD_ARGS:
+        type: string
+        required: false
       ARTIFACTS_NAME:
         type: string
         required: false
@@ -81,6 +84,7 @@ jobs:
         name: Build with Kaniko
         with:
           push: true
+          build-args: "${{ inputs.BUILD_ARGS }}"
           file: "${{ inputs.DOCKERFILE }}"
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}
