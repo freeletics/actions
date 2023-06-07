@@ -82,7 +82,8 @@ jobs:
       actions: write
     uses: freeletics/actions/.github/workflows/docker.yaml@main #this has to be public
     with:
-      ARTIFACTS_NAME: "public"
+      ARTIFACTS_NAME: "public.tar.gz"
+      ARTIFACTS_COMPRESSED: true
       DOCKERFILE: "Dockerfile.gha"
       AWS_REGION: "eu-west-1"
       AWS_ACCOUNT_ID: "524690225562"
@@ -98,6 +99,7 @@ jobs:
     uses: freeletics/actions/.github/workflows/gha-auto-deploy-integration.yaml@main
     with:
       ARTIFACTS_NAME: "public.tar.gz"
+      ARTIFACTS_COMPRESSED: true
       DOCKERFILE: "Dockerfile.gha"
       AWS_REGION: "eu-west-1"
       AWS_ACCOUNT_ID: "524690225562"
