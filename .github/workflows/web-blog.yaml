@@ -62,12 +62,15 @@ jobs:
           CI: false
           GATSBY_APP_ENV: "${{ inputs.GATSBY_APP_ENV }}"
 
+      - name: Compress Artifacts
+        run: tar -czvf public.tar.gz public
+
       - name: Archive production artifacts
         uses: actions/upload-artifact@v3
         with:
           name: public
           path: |
-            public
+            public.tar.gz
           retention-days: 5
 
   docker:
@@ -94,7 +97,7 @@ jobs:
       actions: write
     uses: freeletics/actions/.github/workflows/gha-auto-deploy-integration.yaml@main
     with:
-      ARTIFACTS_NAME: "public"
+      ARTIFACTS_NAME: "public.tar.gz"
       DOCKERFILE: "Dockerfile.gha"
       AWS_REGION: "eu-west-1"
       AWS_ACCOUNT_ID: "524690225562"
