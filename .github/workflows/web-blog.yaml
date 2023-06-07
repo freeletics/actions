@@ -40,6 +40,7 @@ jobs:
         with:
           path: |
             node_modules
+            public
           key: ${{ runner.os }}-${{ inputs.APP_ENV }}-build-web-${{ github.run_id }}
           restore-keys: |
             ${{ runner.os }}-${{ inputs.APP_ENV }}-build-web-
@@ -63,7 +64,9 @@ jobs:
           GATSBY_APP_ENV: "${{ inputs.GATSBY_APP_ENV }}"
 
       - name: Compress Artifacts
-        run: tar -czf public.tar.gz public
+        run: |
+          tar -czf public.tar.gz public
+          cp Docker/sitemap-index-blog.xml public/
 
       - name: Archive production artifacts
         uses: actions/upload-artifact@v3
