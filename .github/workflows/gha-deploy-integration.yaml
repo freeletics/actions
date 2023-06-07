@@ -6,6 +6,10 @@ on:
       ARTIFACTS_NAME:
         type: string
         required: false
+      ARTIFACTS_COMPRESSED:
+        type: boolean
+        required: false
+        default: false
       DOCKERFILE:
         type: string
         required: false
@@ -50,6 +54,10 @@ jobs:
         with:
           name: ${{ inputs.ARTIFACTS_NAME }}
           path: ${{ github.workspace }}/${{ inputs.ARTIFACTS_NAME }}
+
+      - name: Uncompress Artifacts
+        if: ${{ inputs.ARTIFACTS_COMPRESSED == true }}
+        run: tar -xzvf ${{ github.workspace }}/${{ inputs.ARTIFACTS_NAME }} -C ${{ github.workspace }}
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v1.7.0
