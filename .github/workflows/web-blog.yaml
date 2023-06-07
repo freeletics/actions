@@ -63,7 +63,7 @@ jobs:
           GATSBY_APP_ENV: "${{ inputs.GATSBY_APP_ENV }}"
 
       - name: Compress Artifacts
-        run: tar -czvf public.tar.gz public
+        run: tar -czf public.tar.gz public
 
       - name: Archive production artifacts
         uses: actions/upload-artifact@v3
