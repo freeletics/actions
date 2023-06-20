@@ -41,6 +41,7 @@ jobs:
           path: |
             node_modules
             public
+            .cache
           key: ${{ runner.os }}-${{ inputs.APP_ENV }}-build-web-${{ github.run_id }}
           restore-keys: |
             ${{ runner.os }}-${{ inputs.APP_ENV }}-build-web-
