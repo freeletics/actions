@@ -24,7 +24,6 @@ jobs:
     name: Build Docker image
     runs-on: ubuntu-latest
     steps:
-        ################################# PRE STEPS #####################################
       - name: Skip Duplicate Actions
         uses: fkirc/skip-duplicate-actions@v5.2.0
         with:
@@ -41,9 +40,7 @@ jobs:
 
       - name: Login to NPM 
         run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" >> .npmrc
-        #################################################################################
-
-        ################################## WEB ##########################################
+        
       - name: [WEB] Cache yarn modules
         if: github.repository == 'web-service-main'
         uses: actions/cache@v3
@@ -59,7 +56,6 @@ jobs:
         if: github.repository == 'web-service-main'
         run: yarn install
 
-      ################################## WEB BLOG #####################################
       - name: [WEB BLOG] Cache yarn modules
         if: github.repository == 'web-blog'
         uses: actions/cache@v3
@@ -76,7 +72,6 @@ jobs:
         if: github.repository == 'web-blog'
         run: yarn install --production=false
 
-      ################ COMMON BUILD STEP ################
       - name: Build
         run: yarn build
         env:
@@ -85,20 +80,17 @@ jobs:
           APP_ENV: "${{ inputs.APP_ENV }}"
           GATSBY_APP_ENV: "${{ inputs.APP_ENV }}"
 
-      ################################## WEB BLOG #####################################
       - name: [WEB BLOG] Compress Artifacts
         if: github.repository == 'web-blog'
         run: |
           cp Docker/sitemap-index-blog.xml public/
           tar -czf public.tar.gz public
 
-      ################################## WEB ##########################################
       - name: [WEB] Compress Artifacts
         if: github.repository == 'web-service-main'
         run: |
           tar -czf public.tar.gz dist
 
-      ################################## COMMON STEPS #################################
   docker:
     needs: build
     if: contains(github.ref, 'refs/tags/') || contains(github.ref, 'refs/pull/')
