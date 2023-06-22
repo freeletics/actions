@@ -1,4 +1,4 @@
-name: "Web Build with Docker Kaniko"
+name: "Web and blog Build with Docker Kaniko"
 
 on:
   workflow_call:
@@ -17,7 +17,6 @@ permissions:
   contents: read
   actions: write
 
-
 jobs:
   build:
     outputs:
@@ -25,6 +24,7 @@ jobs:
     name: Build Docker image
     runs-on: ubuntu-latest
     steps:
+################################# PRE STEPS ###############################################
       - name: Skip Duplicate Actions
         uses: fkirc/skip-duplicate-actions@v5.2.0
         with:
@@ -34,8 +34,18 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v3
 
-      - name: Cache yarn modules
-        id: cache-yarn
+      - name: Use Node.js
+        uses: actions/setup-node@v1
+        with:
+          node-version: '18.12.1'
+
+      - name: Login to NPM 
+        run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" >> .npmrc
+##########################################################################################
+
+################################## WEB ###################################################
+      - name: [WEB] Cache yarn modules
+        if: github.repository == 'web-service-main'
         uses: actions/cache@v3
         with:
           path: |
@@ -45,32 +55,56 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-${{ inputs.APP_ENV }}-build-web-
 
-      - name: Use Node.js
-        uses: actions/setup-node@v1
-        with:
-          node-version: '18.12.1'
-
-      - name: Login to NPM 
-        run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" >> .npmrc
-
-      - name: Install deps
+      - name: [WEB] Install deps
+        if: github.repository == 'web-service-main'
         run: yarn install
-          
+##########################################################################################
+
+################################## WEB BLOG ##############################################
+      - name: [WEB BLOG] Cache yarn modules
+        if: github.repository == 'web-blog'
+        uses: actions/cache@v3
+        with:
+          path: |
+            node_modules
+            public
+            .cache
+          key: ${{ runner.os }}-${{ inputs.APP_ENV }}-build-web-blog-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-${{ inputs.APP_ENV }}-build-web-blog-
+
+      - name: [WEB BLOG] Install deps
+        if: github.repository == 'web-blog'
+        run: yarn install --production=false
+##########################################################################################
+
+################ COMMON BUILD STEP ################
       - name: Build
         run: yarn build
         env:
           NODE_ENV: "production"
           CI: false
           APP_ENV: "${{ inputs.APP_ENV }}"
+          GATSBY_APP_ENV: "${{ inputs.APP_ENV }}"
+###################################################
 
-      - name: Archive production artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: dist
-          path: |
-            dist
-          retention-days: 5
+################################## WEB BLOG ##############################################
+      - name: [WEB BLOG] Compress Artifacts
+        if: github.repository == 'web-blog'
+        run: |
+          cp Docker/sitemap-index-blog.xml public/
+          tar -czf public.tar.gz public
+##########################################################################################
 
+################################## WEB ###################################################
+      - name: [WEB] Compress Artifacts
+        if: github.repository == 'web-service-main'
+        run: |
+          tar -czf public.tar.gz dist
+##########################################################################################
+
+##########################################################################################
+################################## COMMON STEPS ##########################################
   docker:
     needs: build
     if: contains(github.ref, 'refs/tags/') || contains(github.ref, 'refs/pull/')
@@ -80,7 +114,8 @@ jobs:
       actions: write
     uses: freeletics/actions/.github/workflows/docker.yaml@main #this has to be public
     with:
-      ARTIFACTS_NAME: "dist"
+      ARTIFACTS_NAME: "public"
+      ARTIFACTS_COMPRESSED: true
       DOCKERFILE: "Dockerfile.gha"
       AWS_REGION: "eu-west-1"
       AWS_ACCOUNT_ID: "524690225562"
@@ -95,7 +130,8 @@ jobs:
       actions: write
     uses: freeletics/actions/.github/workflows/gha-auto-deploy-integration.yaml@main
     with:
-      ARTIFACTS_NAME: "dist"
+      ARTIFACTS_NAME: "public"
+      ARTIFACTS_COMPRESSED: true
       DOCKERFILE: "Dockerfile.gha"
       AWS_REGION: "eu-west-1"
       AWS_ACCOUNT_ID: "524690225562"
@@ -110,8 +146,11 @@ jobs:
       actions: write
     uses: freeletics/actions/.github/workflows/web-qa.yaml@main
     with:
-      ARTIFACTS_NAME: "dist"
+      ARTIFACTS_NAME: "public"
+      ARTIFACTS_COMPRESSED: true
       DOCKERFILE: "Dockerfile.gha"
       AWS_REGION: "eu-west-1"
       AWS_ACCOUNT_ID: "524690225562"
     secrets: inherit
+##########################################################################################
+##########################################################################################
