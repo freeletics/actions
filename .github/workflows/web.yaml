@@ -41,6 +41,7 @@ jobs:
 
       - name: Login to NPM 
         run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" >> .npmrc
+        #################################################################################
 
         ################################## WEB ##########################################
       - name: [WEB] Cache yarn modules
