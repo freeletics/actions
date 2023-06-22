@@ -45,7 +45,7 @@ jobs:
 
 ################################## WEB ###################################################
       - name: '[WEB] Cache yarn modules'
-        if: github.repository == 'web-service-main'
+        if: github.event.repository.name == 'web-service-main'
         uses: actions/cache@v3
         with:
           path: |
@@ -56,13 +56,13 @@ jobs:
             ${{ runner.os }}-${{ inputs.APP_ENV }}-build-web-
 
       - name: '[WEB] Install deps'
-        if: github.repository == 'web-service-main'
+        if: github.event.repository.name == 'web-service-main'
         run: yarn install
 ##########################################################################################
 
 ################################## WEB BLOG ##############################################
       - name: '[WEB BLOG] Cache yarn modules'
-        if: github.repository == 'web-blog'
+        if: github.event.repository.name == 'web-blog'
         uses: actions/cache@v3
         with:
           path: |
@@ -74,7 +74,7 @@ jobs:
             ${{ runner.os }}-${{ inputs.APP_ENV }}-build-web-blog-
 
       - name: '[WEB BLOG] Install deps'
-        if: github.repository == 'web-blog'
+        if: github.event.repository.name == 'web-blog'
         run: yarn install --production=false
 ##########################################################################################
 
@@ -90,7 +90,7 @@ jobs:
 
 ################################## WEB BLOG ##############################################
       - name: '[WEB BLOG] Compress Artifacts'
-        if: github.repository == 'web-blog'
+        if: github.event.repository.name == 'web-blog'
         run: |
           cp Docker/sitemap-index-blog.xml public/
           tar -czf public.tar.gz public
@@ -98,7 +98,7 @@ jobs:
 
 ################################## WEB ###################################################
       - name: '[WEB] Compress Artifacts'
-        if: github.repository == 'web-service-main'
+        if: github.event.repository.name == 'web-service-main'
         run: |
           tar -czf public.tar.gz dist
 ##########################################################################################
