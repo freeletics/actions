@@ -105,6 +105,14 @@ jobs:
 
 ##########################################################################################
 ################################## COMMON STEPS ##########################################
+      - name: Archive production artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: public
+          path: |
+            public.tar.gz
+          retention-days: 5
+
   docker:
     needs: build
     if: contains(github.ref, 'refs/tags/') || contains(github.ref, 'refs/pull/')
