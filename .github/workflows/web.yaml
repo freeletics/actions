@@ -24,7 +24,7 @@ jobs:
     name: Build Docker image
     runs-on: ubuntu-latest
     steps:
-      ################################# PRE STEPS #####################################
+        ################################# PRE STEPS #####################################
       - name: Skip Duplicate Actions
         uses: fkirc/skip-duplicate-actions@v5.2.0
         with:
@@ -42,7 +42,7 @@ jobs:
       - name: Login to NPM 
         run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" >> .npmrc
 
-      ################################## WEB ##########################################
+        ################################## WEB ##########################################
       - name: [WEB] Cache yarn modules
         if: github.repository == 'web-service-main'
         uses: actions/cache@v3
