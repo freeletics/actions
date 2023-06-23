@@ -17,11 +17,10 @@ permissions:
   contents: read
   actions: write
 
-env:
-  APP_ENV: "${{ contains(github.ref, 'refs/tags/') && 'production' || inputs.APP_ENV }}"
-
 jobs:
   build:
+    env:
+      APP_ENV: "${{ contains(github.ref, 'refs/tags/') && 'production' || inputs.APP_ENV }}"
     outputs:
       IMAGE_TAG: ${{ steps.IMAGE_TAG.outputs.IMAGE_TAG }}
     name: Build Docker image
@@ -54,9 +53,9 @@ jobs:
           path: |
             node_modules
             public
-          key: ${{ runner.os }}-${APP_ENV}-build-web-${{ github.run_id }}
+          key: ${{ runner.os }}-${{ env.APP_ENV }}-build-web-${{ github.run_id }}
           restore-keys: |
-            ${{ runner.os }}-${APP_ENV}-build-web-
+            ${{ runner.os }}-${{ env.APP_ENV }}-build-web-
 
       - name: '[WEB] Install deps'
         if: github.event.repository.name == 'web-service-main'
@@ -72,9 +71,9 @@ jobs:
             node_modules
             public
             .cache
-          key: ${{ runner.os }}-${APP_ENV}-build-web-blog-${{ github.run_id }}
+          key: ${{ runner.os }}-${{ env.APP_ENV }}-build-web-blog-${{ github.run_id }}
           restore-keys: |
-            ${{ runner.os }}-${APP_ENV}-build-web-blog-
+            ${{ runner.os }}-${{ env.APP_ENV }}-build-web-blog-
 
       - name: '[WEB BLOG] Install deps'
         if: github.event.repository.name == 'web-blog'
@@ -87,8 +86,8 @@ jobs:
         env:
           NODE_ENV: "production"
           CI: false
-          APP_ENV: "$APP_ENV"
-          GATSBY_APP_ENV: "$APP_ENV"
+          APP_ENV: "${{ env.APP_ENV }}"
+          GATSBY_APP_ENV: "${{ env.APP_ENV }}"
 ###################################################
 
 ################################## WEB BLOG ##############################################
@@ -133,7 +132,7 @@ jobs:
     secrets: inherit
 
   integration:
-    if: contains(github.ref, 'refs/heads/') && $APP_ENV != 'qa'
+    if: contains(github.ref, 'refs/heads/') && env.APP_ENV != 'qa'
     needs: build
     permissions:
       id-token: write
@@ -149,7 +148,7 @@ jobs:
     secrets: inherit
     
   qa:
-    if: contains(github.ref, 'refs/heads/') && $APP_ENV == 'qa'
+    if: contains(github.ref, 'refs/heads/') && env.APP_ENV == 'qa'
     needs: build
     permissions:
       id-token: write
