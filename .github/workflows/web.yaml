@@ -132,7 +132,7 @@ jobs:
     secrets: inherit
 
   integration:
-    if: contains(github.ref, 'refs/heads/') && env.APP_ENV != 'qa'
+    if: contains(github.ref, 'refs/heads/') && inputs.APP_ENV != 'qa'
     needs: build
     permissions:
       id-token: write
@@ -148,7 +148,7 @@ jobs:
     secrets: inherit
     
   qa:
-    if: contains(github.ref, 'refs/heads/') && env.APP_ENV == 'qa'
+    if: contains(github.ref, 'refs/heads/') && inputs.APP_ENV == 'qa'
     needs: build
     permissions:
       id-token: write
