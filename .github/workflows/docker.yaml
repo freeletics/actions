@@ -98,27 +98,3 @@ jobs:
           labels: ${{ steps.metadata.outputs.labels }}
           cache: ${{ inputs.KANIKO_CACHE }}
           cache-repository: ${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/kaniko-cache
-
-      - name: Delete Old Artifacts
-        if: ${{ inputs.ARTIFACTS_NAME != '' }}
-        continue-on-error: true
-        uses: actions/github-script@v6
-        with:
-          script: |
-            try {
-              const artifacts = await github.rest.actions.listArtifactsForRepo({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-              })
-              if (artifacts) {
-                  artifacts.data.artifacts.forEach(({ artifact_id }) => {
-                      const deleteArtifact = github.rest.actions.deleteArtifact({
-                        owner: context.repo.owner,
-                        repo: context.repo.repo,
-                        artifact_id: artifact_id,
-                      })
-                    })
-                }
-            } catch(e) {
-              console.log("Delete Old Artifacts failed with error: ",e)
-            }
