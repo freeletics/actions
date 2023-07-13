@@ -43,43 +43,31 @@ jobs:
 
       - name: Login to NPM 
         run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" >> .npmrc
-##########################################################################################
 
-################################## WEB ###################################################
-      - name: '[WEB] Cache yarn modules'
+      - name: 'Cache yarn modules'
         if: github.event.repository.name == 'web-service-main'
-        uses: actions/cache@v3
-        with:
-          path: |
-            node_modules
-            public
-          key: ${{ runner.os }}-${{ env.APP_ENV }}-build-web-${{ github.run_id }}
-          restore-keys: |
-            ${{ runner.os }}-${{ env.APP_ENV }}-build-web-
-
-      - name: '[WEB] Install deps'
-        if: github.event.repository.name == 'web-service-main'
-        run: yarn install
-##########################################################################################
-
-################################## WEB BLOG ##############################################
-      - name: '[WEB BLOG] Cache yarn modules'
-        if: github.event.repository.name == 'web-blog'
         uses: actions/cache@v3
         with:
           path: |
             node_modules
             public
             .cache
-          key: ${{ runner.os }}-${{ env.APP_ENV }}-build-web-blog-${{ github.run_id }}
+          key: ${{ runner.os }}-${{ env.APP_ENV }}-build-${{ github.event.repository.name }}-${{ github.run_id }}
           restore-keys: |
-            ${{ runner.os }}-${{ env.APP_ENV }}-build-web-blog-
+            ${{ runner.os }}-${{ env.APP_ENV }}-build-${{ github.event.repository.name }}-
+##########################################################################################
 
+################################## WEB ###################################################
+      - name: '[WEB] Install deps'
+        if: github.event.repository.name == 'web-service-main'
+        run: yarn install
+##########################################################################################
+
+################################## WEB BLOG ##############################################
       - name: '[WEB BLOG] Install deps'
         if: github.event.repository.name == 'web-blog'
         run: |
           yarn install --production=false
-          yarn run clean
 ##########################################################################################
 
 ################ COMMON BUILD STEP ################
