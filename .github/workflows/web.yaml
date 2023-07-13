@@ -77,7 +77,9 @@ jobs:
 
       - name: '[WEB BLOG] Install deps'
         if: github.event.repository.name == 'web-blog'
-        run: yarn install --production=false
+        run: |
+          yarn install --production=false
+          yarn run clean
 ##########################################################################################
 
 ################ COMMON BUILD STEP ################
