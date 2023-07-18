@@ -23,7 +23,7 @@ jobs:
       APP_ENV: "${{ contains(github.ref, 'refs/tags/') && 'production' || inputs.APP_ENV }}"
     outputs:
       IMAGE_TAG: ${{ steps.IMAGE_TAG.outputs.IMAGE_TAG }}
-    name: Build Docker image
+    name: Build step
     runs-on: ubuntu-latest
     steps:
 ################################# PRE STEPS ###############################################
@@ -96,6 +96,7 @@ jobs:
 
   docker:
     needs: build
+    name: Docker step
     if: contains(github.ref, 'refs/tags/') || contains(github.ref, 'refs/pull/')
     permissions:
       id-token: write
@@ -113,6 +114,7 @@ jobs:
   integration:
     if: contains(github.ref, 'refs/heads/') && inputs.APP_ENV != 'qa'
     needs: build
+    name: Deploy to integration
     permissions:
       id-token: write
       contents: read
@@ -129,6 +131,7 @@ jobs:
   qa:
     if: contains(github.ref, 'refs/heads/') && inputs.APP_ENV == 'qa'
     needs: build
+    name: Deploy to QA
     permissions:
       id-token: write
       contents: read
