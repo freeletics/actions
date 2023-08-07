@@ -13,6 +13,8 @@ jobs:
     # if: contains(github.ref, 'refs/heads/')
     name: Send information to chatbot
     runs-on: ubuntu-latest
+    env:
+          BRANCH: ${{ github.ref }}
     steps:
       - name: Skip Duplicate Actions
         uses: fkirc/skip-duplicate-actions@v5.2.0
@@ -27,11 +29,10 @@ jobs:
       # https://webhook.site/#!/a4328475-c2fe-463a-9478-2c9ceafd7392/77576362-12c3-4d64-8708-4b8806b050e5/1
       - name: Curl to chatbot
         run: >-
-          curl "https://webhook.site/a4328475-c2fe-463a-9478-2c9ceafd7392
-          ?branch_name=${GITHUB_REF##*/}
-          &commit_sha=${GITHUB_SHA}
-          &repository=${{github.event.repository.name }}
-          "
+          curl -G "https://webhook.site/a4328475-c2fe-463a-9478-2c9ceafd7392"
+          -d "branch_name=${GITHUB_REF##*/}"
+          -d "commit_sha=${{github.sha}}"
+          -d "repository=${{github.event.repository.name }}"
 
 ############################### HOW TO CALL ##############################################
   # jira_markers:
