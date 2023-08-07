@@ -10,8 +10,7 @@ permissions:
 
 jobs:
   build:
-    # if: contains(github.ref, 'refs/heads/')
-    name: Send information to chatbot
+    name: Check for Jira tickets
     runs-on: ubuntu-latest
     env:
           BRANCH: ${{ github.ref }}
