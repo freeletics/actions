@@ -1,0 +1,44 @@
+name: "Jira deployment markers"
+
+on:
+  workflow_call:
+
+permissions:
+  id-token: write
+  contents: read
+  actions: write
+
+jobs:
+  build:
+    # if: contains(github.ref, 'refs/heads/')
+    name: Sends information to chatbot
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip Duplicate Actions
+        uses: fkirc/skip-duplicate-actions@v5.2.0
+        with:
+          concurrent_skipping: "same_content"
+          cancel_others: "true"
+          
+      - name: Check out code
+        uses: actions/checkout@v3
+      
+      # Check the requests here:
+      # https://webhook.site/#!/a4328475-c2fe-463a-9478-2c9ceafd7392/77576362-12c3-4d64-8708-4b8806b050e5/1
+      - name: Curl to chatbot
+        run: >-
+          curl curl "https://webhook.site/a4328475-c2fe-463a-9478-2c9ceafd7392
+          ?branch_name=${GITHUB_REF##*/}
+          &commit_sha=${GITHUB_SHA}
+          &repository=${{ github.event.repository.name }}
+          "
+############################### HOW TO CALL ##############################################
+  # jira_markers:
+  #   needs: build
+  #   name: Check for Jira tickets
+  #   permissions:
+  #     id-token: write
+  #     contents: read
+  #     actions: write
+  #   uses: freeletics/actions/.github/workflows/jira-deployment-marker.yaml@main
+##########################################################################################

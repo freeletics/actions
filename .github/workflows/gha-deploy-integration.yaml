@@ -92,3 +92,12 @@ jobs:
           labels: ${{ steps.metadata.outputs.labels }}
           cache: ${{ inputs.KANIKO_CACHE }}
           cache-repository: ${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/kaniko-cache
+
+  jira_markers:
+    needs: build
+    name: Check for Jira tickets
+    permissions:
+      id-token: write
+      contents: read
+      actions: write
+    uses: freeletics/actions/.github/workflows/jira-deployment-marker.yaml@main
