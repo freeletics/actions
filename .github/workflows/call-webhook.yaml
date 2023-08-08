@@ -1,7 +1,17 @@
 name: "Jira deployment markers"
 
+
 on:
   workflow_call:
+    inputs:
+      ENVIRONMENT:
+        required: false
+        type: string
+        default: integration
+      URL:
+        required: false
+        type: string
+        default: "https://webhook.site/a4328475-c2fe-463a-9478-2c9ceafd7392"
 
 permissions:
   id-token: write
@@ -28,10 +38,11 @@ jobs:
       # https://webhook.site/#!/a4328475-c2fe-463a-9478-2c9ceafd7392/77576362-12c3-4d64-8708-4b8806b050e5/1
       - name: Curl to chatbot
         run: >-
-          curl -G "https://webhook.site/a4328475-c2fe-463a-9478-2c9ceafd7392"
+          curl -G "${{inputs.URL}}"
           -d "branch_name=${GITHUB_REF##*/}"
           -d "commit_sha=${{github.sha}}"
           -d "repository=${{github.event.repository.name }}"
+          -d "environment=${{inputs.ENVIRONMENT}}"
 
 ############################### HOW TO CALL ##############################################
   # jira_markers:
@@ -41,5 +52,5 @@ jobs:
   #     id-token: write
   #     contents: read
   #     actions: write
-  #   uses: freeletics/actions/.github/workflows/jira-deployment-marker.yaml@main
+  #   uses: freeletics/actions/.github/workflows/call-webhook.yaml@main
 ##########################################################################################
