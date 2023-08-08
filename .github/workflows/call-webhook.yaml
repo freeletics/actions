@@ -1,4 +1,4 @@
-name: "Jira deployment markers"
+name: "Call webhook"
 
 
 on:
@@ -20,7 +20,7 @@ permissions:
 
 jobs:
   build:
-    name: Check for Jira tickets
+    name: Call webhook
     runs-on: ubuntu-latest
     env:
           BRANCH: ${{ github.ref }}
@@ -36,7 +36,7 @@ jobs:
       
       # Check the requests here:
       # https://webhook.site/#!/a4328475-c2fe-463a-9478-2c9ceafd7392/77576362-12c3-4d64-8708-4b8806b050e5/1
-      - name: Curl to chatbot
+      - name: Curl to webhook
         run: >-
           curl -G "${{inputs.URL}}"
           -d "branch_name=${GITHUB_REF##*/}"
