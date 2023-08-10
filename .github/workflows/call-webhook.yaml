@@ -37,14 +37,15 @@ jobs:
       # https://webhook.site/#!/a4328475-c2fe-463a-9478-2c9ceafd7392/77576362-12c3-4d64-8708-4b8806b050e5/1
       - name: Curl to webhook
         run: >-
-          first_sha=$(git log --pretty=short|grep commit |awk 'END {print $2}');
+          branch="${GITHUB_REF##*/}";
+          first_sha=$(git log "origin/${branch}" --pretty=short|grep commit |grep -v Initial|awk 'END {print $2}');
 
           curl "${{inputs.URL}}"
           -d "{
             \"deployment\": {
               \"repo_name\": \"${{github.event.repository.name }}\",
               \"environment\": \"${{inputs.ENVIRONMENT}}\",
-              \"branch_name\":\"${GITHUB_REF##*/}\",
+              \"branch_name\":\"${branch}\",
               \"commit_shas\": {
                 \"first_sha\":\"${first_sha}\",
                 \"last_sha\": \"${{github.sha}}\"
