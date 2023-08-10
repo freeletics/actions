@@ -100,4 +100,6 @@ jobs:
       id-token: write
       contents: read
       actions: write
-    uses: freeletics/actions/.github/workflows/jira-deployment-marker.yaml@main
+    uses: freeletics/actions/.github/workflows/call-webhook.yaml@main
+    with:
+      URL: "https://webhook.site/a4328475-c2fe-463a-9478-2c9ceafd7392"
