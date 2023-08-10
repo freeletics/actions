@@ -9,9 +9,8 @@ on:
         type: string
         default: integration
       URL:
-        required: false
+        required: true
         type: string
-        default: "https://webhook.site/a4328475-c2fe-463a-9478-2c9ceafd7392"
 
 permissions:
   id-token: write
@@ -38,11 +37,18 @@ jobs:
       # https://webhook.site/#!/a4328475-c2fe-463a-9478-2c9ceafd7392/77576362-12c3-4d64-8708-4b8806b050e5/1
       - name: Curl to webhook
         run: >-
-          curl -G "${{inputs.URL}}"
-          -d "branch_name=${GITHUB_REF##*/}"
-          -d "commit_sha=${{github.sha}}"
-          -d "repository=${{github.event.repository.name }}"
-          -d "environment=${{inputs.ENVIRONMENT}}"
+          curl "${{inputs.URL}}"
+          -d "{
+            \"deployment\": {
+              \"repo_name\": \"${{github.event.repository.name }}\",
+              \"environment\": \"${{inputs.ENVIRONMENT}}\",
+              \"branch_name\":\"${GITHUB_REF##*/}\",
+              \"commit_shas\": {
+                \"first_sha\":\"$(git cherry -v main |awk 'END {print $2}')\",
+                \"last_sha\": \"${{github.sha}}\"
+              }
+            }
+          }"
 
 ############################### HOW TO CALL ##############################################
   # jira_markers:
@@ -53,4 +59,6 @@ jobs:
   #     contents: read
   #     actions: write
   #   uses: freeletics/actions/.github/workflows/call-webhook.yaml@main
+  #   with:
+  #     URL: "https://webhook.site/a4328475-c2fe-463a-9478-2c9ceafd7392"
 ##########################################################################################
