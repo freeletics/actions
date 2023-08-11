@@ -41,6 +41,7 @@ jobs:
       - name: Curl to webhook
         run: >-
           first_sha=$((git cherry -v master HEAD || git cherry -v main HEAD) |awk 'END {print $2}');
+          test ${#first_sha} -gt 1 || first_sha=$(git rev-list HEAD) |awk 'END {print $0}');
 
           curl "${{inputs.URL}}"
           -d "{
