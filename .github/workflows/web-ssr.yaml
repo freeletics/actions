@@ -1,15 +1,22 @@
-name: "Docker Build with Kaniko DEPS"
+name: "WEB-SSR builder"
 
 on:
-  pull_request:
-    types: [opened, reopened]
-  push:
-    branches: ["*"]
+  workflow_call:
+    inputs:
+      APP_ENV:
+        required: false
+        type: string
+        default: "staging"
+      DOCKERFILE:
+        required: false
+        type: string
+        default: "Dockerfile"
 
 permissions:
   id-token: write
   contents: read
   actions: write
+
 
 env:
   AWS_REGION: "eu-west-1"
