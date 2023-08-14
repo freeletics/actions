@@ -1,0 +1,101 @@
+name: "Docker Build with Kaniko DEPS"
+
+on:
+  pull_request:
+    types: [opened, reopened]
+  push:
+    branches: ["*"]
+
+permissions:
+  id-token: write
+  contents: read
+  actions: write
+
+env:
+  AWS_REGION: "eu-west-1"
+  AWS_ACCOUNT_ID: "524690225562"
+  AWS_ECR_ENV_NAME: "prod"
+  KANIKO_CACHE: true
+
+jobs:
+  build:
+    outputs:
+      IMAGE_TAG: ${{ steps.IMAGE_TAG.outputs.IMAGE_TAG }}
+    name: Build app
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip Duplicate Actions
+        uses: fkirc/skip-duplicate-actions@v5.2.0
+        with:
+          concurrent_skipping: "same_content"
+          cancel_others: "true"
+          
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Use Node.js
+        uses: actions/setup-node@v3.8.0
+        with:
+          node-version: '18.12.1'
+      - name: Login to NPM 
+        run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" >> .npmrc
+
+      - name: Cache nextjs
+        uses: actions/cache@v3
+        with:
+          path: ${{ github.workspace }}/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('**/package.json') }}
+
+      - name: 'Install deps'
+        run: yarn install
+
+      - name: Build
+        run: yarn build
+        env:
+          NODE_ENV: "production"
+          CI: false
+
+      - name: '[WEB SSR] Compress Artifacts'
+        run: |
+          tar -czf public.tar.gz ${{ github.workspace }}/public ${{ github.workspace }}/.next/standalone ${{ github.workspace }}/.next/static
+    
+      - name: Archive production artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: public
+          path: |
+            public.tar.gz
+          retention-days: 5
+  docker:
+    needs: build
+    name: Docker step
+    if: contains(github.ref, 'refs/tags/') || contains(github.ref, 'refs/pull/')
+    permissions:
+      id-token: write
+      contents: read
+      actions: write
+    uses: freeletics/actions/.github/workflows/docker.yaml@main #this has to be public
+    with:
+      ARTIFACTS_NAME: "public"
+      ARTIFACTS_COMPRESSED: true
+      DOCKERFILE: "Dockerfile.gha"
+      AWS_REGION: "eu-west-1"
+      AWS_ACCOUNT_ID: "524690225562"
+    secrets: inherit
+
+  integration:
+    if: contains(github.ref, 'refs/heads/')
+    needs: build
+    name: Deploy to integration
+    permissions:
+      id-token: write
+      contents: read
+      actions: write
+    uses: freeletics/actions/.github/workflows/gha-auto-deploy-integration.yaml@main
+    with:
+      ARTIFACTS_NAME: "public"
+      ARTIFACTS_COMPRESSED: true
+      DOCKERFILE: "Dockerfile.gha"
+      AWS_REGION: "eu-west-1"
+      AWS_ACCOUNT_ID: "524690225562"
+    secrets: inherit
