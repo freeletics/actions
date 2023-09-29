@@ -26,6 +26,8 @@ env:
 
 jobs:
   build:
+    env:
+      APP_ENV: "${{ contains(github.ref, 'refs/tags/') && 'production' || inputs.APP_ENV }}"
     outputs:
       IMAGE_TAG: ${{ steps.IMAGE_TAG.outputs.IMAGE_TAG }}
     name: Build app
