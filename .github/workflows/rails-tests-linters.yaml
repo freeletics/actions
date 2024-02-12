@@ -61,7 +61,7 @@ jobs:
 
       - uses: actions/checkout@v3
         name: Checkout the code
-      - uses: ruby/setup-ruby@v1
+      - uses: ruby/setup-ruby@v1.171.0
         name: Prepare ruby environment
         with:
           bundler-cache: true
