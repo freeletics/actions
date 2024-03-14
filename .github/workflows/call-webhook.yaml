@@ -25,7 +25,7 @@ jobs:
           BRANCH: ${{ github.ref }}
     steps:
       - name: Skip Duplicate Actions
-        uses: fkirc/skip-duplicate-actions@v5.2.0
+        uses: fkirc/skip-duplicate-actions@v5.3.1
         with:
           concurrent_skipping: "same_content"
           cancel_others: "true"
