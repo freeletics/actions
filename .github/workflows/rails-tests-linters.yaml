@@ -59,7 +59,7 @@ jobs:
           concurrent_skipping: "same_content"
           cancel_others: "true"
 
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         name: Checkout the code
       - uses: ruby/setup-ruby@v1
         name: Prepare ruby environment
@@ -94,7 +94,7 @@ jobs:
       linters_job_result: ${{ steps.linters_job_result.outputs.linters_job_result }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 50
       - name: Install Ruby and gems
