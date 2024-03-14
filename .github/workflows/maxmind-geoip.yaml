@@ -13,7 +13,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: MaxMind GeoIP Update
-        uses: docker://ghcr.io/maxmind/geoipupdate:v5.1.1
+        uses: docker://ghcr.io/maxmind/geoipupdate:v6.1.0
         env:
           GEOIPUPDATE_ACCOUNT_ID: ${{ secrets.MAXMIND_ACCOUNT_ID }}
           GEOIPUPDATE_LICENSE_KEY: ${{ secrets.MAXMIND_LICENSE_KEY }}
