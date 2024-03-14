@@ -73,7 +73,7 @@ jobs:
 
       - name: Login to Amazon ECR Private
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1.6.0
+        uses: aws-actions/amazon-ecr-login@v2.0.1
 
         # for tag we use gha-prod
         # for intgration get a new image tag with date of today; then a webhook will notify Flux of changes
