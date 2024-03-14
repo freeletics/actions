@@ -67,7 +67,7 @@ jobs:
 
       - name: Login to Amazon ECR Private
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1.6.0
+        uses: aws-actions/amazon-ecr-login@v1.7.1
 
       - name: Get Today's Unix timestamp
         id: timestamp
