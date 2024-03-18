@@ -48,6 +48,8 @@ jobs:
           node-version: '18.12.1'
       - name: Login to NPM 
         run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" >> .npmrc
+      - name: Check if login is successfull 
+        run: npm whoami --registry=https://registry.npmjs.org
 
       - name: Cache nextjs
         uses: actions/cache@v4
@@ -108,3 +110,22 @@ jobs:
       AWS_REGION: "eu-west-1"
       AWS_ACCOUNT_ID: "524690225562"
     secrets: inherit
+
+    
+  qa:
+    if: contains(github.ref, 'refs/heads/') && inputs.APP_ENV == 'qa'
+    needs: build
+    name: Deploy to QA
+    permissions:
+      id-token: write
+      contents: read
+      actions: write
+    uses: freeletics/actions/.github/workflows/web-ssr-qa.yaml@main
+    with:
+      ARTIFACTS_NAME: "public"
+      ARTIFACTS_COMPRESSED: true
+      DOCKERFILE: "Dockerfile.gha"
+      AWS_REGION: "eu-west-1"
+      AWS_ACCOUNT_ID: "524690225562"
+    secrets: inherit
+##########################################################################################
