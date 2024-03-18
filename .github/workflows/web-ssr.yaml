@@ -108,3 +108,22 @@ jobs:
       AWS_REGION: "eu-west-1"
       AWS_ACCOUNT_ID: "524690225562"
     secrets: inherit
+
+    
+  qa:
+    if: contains(github.ref, 'refs/heads/') && inputs.APP_ENV == 'qa'
+    needs: build
+    name: Deploy to QA
+    permissions:
+      id-token: write
+      contents: read
+      actions: write
+    uses: freeletics/actions/.github/workflows/web-qa.yaml@main
+    with:
+      ARTIFACTS_NAME: "public"
+      ARTIFACTS_COMPRESSED: true
+      DOCKERFILE: "Dockerfile.gha"
+      AWS_REGION: "eu-west-1"
+      AWS_ACCOUNT_ID: "524690225562"
+    secrets: inherit
+##########################################################################################
