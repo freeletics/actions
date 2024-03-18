@@ -95,7 +95,7 @@ jobs:
     secrets: inherit
 
   integration:
-    if: contains(github.ref, 'refs/heads/')
+    if: contains(github.ref, 'refs/heads/') && inputs.APP_ENV == 'integration'
     needs: build
     name: Deploy to integration
     permissions:
