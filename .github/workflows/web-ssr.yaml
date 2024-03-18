@@ -118,7 +118,7 @@ jobs:
       id-token: write
       contents: read
       actions: write
-    uses: freeletics/actions/.github/workflows/web-qa.yaml@main
+    uses: freeletics/actions/.github/workflows/web-ssr-qa.yaml@main
     with:
       ARTIFACTS_NAME: "public"
       ARTIFACTS_COMPRESSED: true
