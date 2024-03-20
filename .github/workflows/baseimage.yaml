@@ -3,10 +3,13 @@ name: "Docker Base-Image Updater"
 on:
   workflow_call:
     inputs:
-      prefix:
-        required: false
+      DOCKERFILE:
         type: string
-
+        required: false
+        default: "Dockerfile"
+      AWS_ACCOUNT_ID:
+        required: true
+        type: string
 permissions:
   id-token: write
   contents: read
@@ -27,7 +30,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4.0.2
         with:
           role-to-assume: arn:aws:iam::${{ inputs.AWS_ACCOUNT_ID }}:role/github-actions/fl-prod-${{ github.event.repository.name }}
-          aws-region: ${{ inputs.AWS_REGION }}
+          aws-region: eu-west-1
 
       - name: Login to Amazon ECR Private
         id: login-ecr
