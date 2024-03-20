@@ -1,0 +1,75 @@
+name: "Released"
+
+on:
+  workflow_call:
+    inputs:
+      prefix:
+        required: false
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+  actions: write
+
+jobs:
+  build:
+    name: Build Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.JENKINS_PAT_FLUXCD }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4.0.2
+        with:
+          role-to-assume: arn:aws:iam::${{ inputs.AWS_ACCOUNT_ID }}:role/github-actions/fl-prod-${{ github.event.repository.name }}
+          aws-region: ${{ inputs.AWS_REGION }}
+
+      - name: Login to Amazon ECR Private
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2.0.1
+
+      - name: Find latest tag on ECR
+        id: get-tag
+        run: |
+          image_tags=$(aws ecr describe-images --repository-name "${{ github.event.repository.name }}" --region "eu-west-1" --output json | jq -r '.imageDetails[].imageTags[]' | grep '^\d\{4\}-\d\{2\}-\d\{2\}_\d\{2\}-\d\{2\}-\d\{2\}$')
+          latest_tag=$(echo "${image_tags}" | sort -r | head -n 1)
+          echo "latest_tag=$latest_tag" >> $GITHUB_OUTPUT
+          
+      - name: Update the Docker image
+        uses: mikefarah/yq@v4.42.1
+        if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
+        run: |
+          cd ${{ github.event.repository.name }}
+          sed -i "s|^\(FROM .*\):.*|\1:${{ steps.get-tag.outputs.latest_tag }}|" "Dockerfile"
+
+      - name: Commit and push changes
+        run: |
+          cd ${{ github.event.repository.name }}
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git checkout -b update-dockerfile-${{ github.run_id }}
+          git add Dockerfile
+          git commit -m "Update Dockerfile with new image tag ${{ steps.get-tag.outputs.latest_tag }}"
+          git push origin update-dockerfile-${{ github.run_id }}
+  
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        id: cpr
+        with:
+          token: ${{ secrets.JENKINS_PAT_FLUXCD }}
+          path: "${{ github.event.repository.name }}"
+          add-paths: "./Dockerfile"
+          commit-message: "Update Dockerfile to ${{ steps.get-tag.outputs.latest_tag }}"
+          branch:  update-dockerfile-${{ github.run_id }}
+          title: "Update Dockerfile to ${{ steps.get-tag.outputs.latest_tag }}"
+          body: "This PR updates the Dockerfile to use the latest image tag."
+          branch: update-dockerfile-${{ github.run_id }}
+          reviewers: "khaledm1990,alberto98fx"
+          team-reviewers: "Operations"
+          labels: "baseimage-bump"
+
