@@ -79,7 +79,7 @@ jobs:
         with:
           token: ${{ secrets.JENKINS_PAT_FLUXCD }}
           base: "master"
-          # path: "${{ github.event.repository.name }}"
+          path: "${{ github.event.repository.name }}"
           add-paths: "./Dockerfile"
           commit-message: "Update Dockerfile to ${{ steps.get-tag.outputs.latest_tag }}"
           title: "Update Dockerfile to ${{ steps.get-tag.outputs.latest_tag }}"
