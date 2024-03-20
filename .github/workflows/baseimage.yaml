@@ -53,19 +53,18 @@ jobs:
           if [ "${current_tag}" = "${{ steps.get-tag.outputs.latest_tag }}" ]; then
             echo "The Dockerfile already uses the latest image tag. No update needed."
           else
+            echo "We need to update the image: current tag is $current_tag"
             echo "update_needed=true" >> $GITHUB_OUTPUT
           fi
           
       - name: Update the Docker image
         if: steps.check_update.outputs.update_needed == 'true'
         run: |
-          cd ${{ github.event.repository.name }}
           sed -i "s|^\(FROM .*\):.*|\1:${{ steps.get-tag.outputs.latest_tag }}|" "${{ inputs.DOCKERFILE }}"
 
       - name: Commit and push changes
         if: steps.check_update.outputs.update_needed == 'true'
         run: |
-          cd ${{ github.event.repository.name }}
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           git checkout -b update-dockerfile-${{ github.run_id }}
@@ -79,7 +78,7 @@ jobs:
         id: cpr
         with:
           token: ${{ secrets.JENKINS_PAT_FLUXCD }}
-          path: "${{ github.event.repository.name }}"
+          # path: "${{ github.event.repository.name }}"
           add-paths: "./Dockerfile"
           commit-message: "Update Dockerfile to ${{ steps.get-tag.outputs.latest_tag }}"
           title: "Update Dockerfile to ${{ steps.get-tag.outputs.latest_tag }}"
