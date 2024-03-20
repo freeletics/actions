@@ -72,19 +72,19 @@ jobs:
           git commit -m "Update Dockerfile with new image tag ${{ steps.get-tag.outputs.latest_tag }}"
           git push origin update-dockerfile-${{ github.run_id }}
   
-      - name: Create Pull Request
-        if: steps.check_update.outputs.update_needed == 'true'
-        uses: peter-evans/create-pull-request@v6
-        id: cpr
-        with:
-          token: ${{ secrets.JENKINS_PAT_FLUXCD }}
-          base: "master"
-          add-paths: "Dockerfile"
-          commit-message: "Update Dockerfile to ${{ steps.get-tag.outputs.latest_tag }}"
-          title: "Update Dockerfile to ${{ steps.get-tag.outputs.latest_tag }}"
-          body: "This PR updates the Dockerfile to use the latest image tag."
-          branch: update-dockerfile-${{ github.run_id }}
-          reviewers: "khaledm1990,alberto98fx"
-          team-reviewers: "Operations"
-          labels: "baseimage-bump"
+      # - name: Create Pull Request
+      #   if: steps.check_update.outputs.update_needed == 'true'
+      #   uses: peter-evans/create-pull-request@v6
+      #   id: cpr
+      #   with:
+      #     token: ${{ secrets.JENKINS_PAT_FLUXCD }}
+      #     base: "master"
+      #     add-paths: "Dockerfile"
+      #     commit-message: "Update Dockerfile to ${{ steps.get-tag.outputs.latest_tag }}"
+      #     title: "Update Dockerfile to ${{ steps.get-tag.outputs.latest_tag }}"
+      #     body: "This PR updates the Dockerfile to use the latest image tag."
+      #     branch: update-dockerfile-${{ github.run_id }}
+      #     reviewers: "khaledm1990,alberto98fx"
+      #     team-reviewers: "Operations"
+      #     labels: "baseimage-bump"
 
