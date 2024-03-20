@@ -64,6 +64,8 @@ jobs:
 
       - name: Commit changes and create PR 
         if: steps.check_update.outputs.update_needed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.JENKINS_PAT_FLUXCD }}
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
