@@ -73,6 +73,7 @@ jobs:
           git add Dockerfile
           git commit -m "Update Dockerfile with new image tag ${{ steps.get-tag.outputs.latest_tag }}"
           git push origin update-dockerfile-${{ github.run_id }}
+          echo "${{ secrets.DEPENDABOT_PAT }}" | gh auth login --with-token
           gh pr create --title "Update Dockerfile to ${{ steps.get-tag.outputs.latest_tag }}" \
             --body "This PR updates the Dockerfile to use the latest image tag." \
             --reviewer khaledm1990,alberto98fx,freeletics/Operations
