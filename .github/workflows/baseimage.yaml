@@ -39,16 +39,28 @@ jobs:
       - name: Find latest tag on ECR
         id: get-tag
         run: |
-          image_tags=$(aws ecr describe-images --repository-name "${{ github.event.repository.name }}" --region "eu-west-1" --output json | jq -r '.imageDetails[].imageTags[]' | grep '^\d\{4\}-\d\{2\}-\d\{2\}_\d\{2\}-\d\{2\}-\d\{2\}$')
+          image_tags=$(aws ecr describe-images --repository-name "rails-baseimage" --region "eu-west-1" --output json | jq -r '.imageDetails[] | select(.imageTags != null) | .imageTags[]' | grep '^\d\{4\}-\d\{2\}-\d\{2\}_\d\{2\}-\d\{2\}-\d\{2\}$')
           latest_tag=$(echo "${image_tags}" | sort -r | head -n 1)
           echo "latest_tag=$latest_tag" >> $GITHUB_OUTPUT
+
+      - name: Check updated needed for dockerfile
+        id: check_update
+        run: |
+          current_tag=$(grep -oP 'FROM .+:\K.+' "${{ inputs.DOCKERFILE }}")
+          if [ "${current_tag}" = "${{ steps.get-tag.outputs.latest_tag }}" ]; then
+            echo "The Dockerfile already uses the latest image tag. No update needed."
+          else
+            echo "update_needed=true" >> $GITHUB_OUTPUT
+          fi
           
       - name: Update the Docker image
+        if: steps.check_update.outputs.update_needed == 'true'
         run: |
           cd ${{ github.event.repository.name }}
-          sed -i "s|^\(FROM .*\):.*|\1:${{ steps.get-tag.outputs.latest_tag }}|" "Dockerfile"
+          sed -i "s|^\(FROM .*\):.*|\1:${{ steps.get-tag.outputs.latest_tag }}|" "${{ inputs.DOCKERFILE }}"
 
       - name: Commit and push changes
+        if: steps.check_update.outputs.update_needed == 'true'
         run: |
           cd ${{ github.event.repository.name }}
           git config --global user.name 'github-actions[bot]'
@@ -59,6 +71,7 @@ jobs:
           git push origin update-dockerfile-${{ github.run_id }}
   
       - name: Create Pull Request
+        if: steps.check_update.outputs.update_needed == 'true'
         uses: peter-evans/create-pull-request@v6
         id: cpr
         with:
