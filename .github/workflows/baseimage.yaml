@@ -1,4 +1,4 @@
-name: "Released"
+name: "Docker Base-Image Updater"
 
 on:
   workflow_call:
