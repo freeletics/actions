@@ -63,7 +63,6 @@ jobs:
           path: "${{ github.event.repository.name }}"
           add-paths: "./Dockerfile"
           commit-message: "Update Dockerfile to ${{ steps.get-tag.outputs.latest_tag }}"
-          branch:  update-dockerfile-${{ github.run_id }}
           title: "Update Dockerfile to ${{ steps.get-tag.outputs.latest_tag }}"
           body: "This PR updates the Dockerfile to use the latest image tag."
           branch: update-dockerfile-${{ github.run_id }}
