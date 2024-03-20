@@ -40,8 +40,7 @@ jobs:
         id: get-tag
         shell: bash
         run: |
-          aws ecr describe-images --repository-name "rails-baseimage" --region "eu-west-1" --output json | jq -r '.imageDetails[] | select(.imageTags != null) | .imageTags[]' || echo "no_match_found"
-          image_tags=$(aws ecr describe-images --repository-name "rails-baseimage" --region "eu-west-1" --output json | jq -r '.imageDetails[] | select(.imageTags != null) | .imageTags[]' | grep '^\d\{4\}-\d\{2\}-\d\{2\}_\d\{2\}-\d\{2\}-\d\{2\}$')
+          image_tags=$(aws ecr describe-images --repository-name "rails-baseimage" --region "eu-west-1" --output json | jq -r '.imageDetails[] | select(.imageTags != null) | .imageTags[]' | awk '/^[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{2}-[0-9]{2}-[0-9]{2}$/')
           echo "$image_tags"
           latest_tag=$(echo "${image_tags}" | sort -r | head -n 1)
           echo "$latest_tag"
