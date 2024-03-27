@@ -59,7 +59,7 @@ jobs:
           tags: |
             type=raw,value=${{github.ref_name}}
 
-      - uses: int128/kaniko-action@v1.40.0
+      - uses: int128/kaniko-action@v1.41.0
         name: Build with Kaniko
         with:
           push: true

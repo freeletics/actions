@@ -83,7 +83,7 @@ jobs:
             type=sha,enable=true,priority=600,prefix=gha-,suffix=
             type=raw,enable=true,priority=600,prefix=gha-deploy-int-,value=${{ steps.timestamp.outputs.date }}
 
-      - uses: int128/kaniko-action@v1.40.0
+      - uses: int128/kaniko-action@v1.41.0
         name: Build with Kaniko
         with:
           push: true
