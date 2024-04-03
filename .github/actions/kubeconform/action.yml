@@ -1,0 +1,5 @@
+name: 'Kubeconform Docker'
+description: 'Validate'
+runs:
+  using: 'docker'
+  image: 'Dockerfile'
