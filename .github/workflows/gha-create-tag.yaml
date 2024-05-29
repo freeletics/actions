@@ -61,7 +61,7 @@ jobs:
 
 
       - name: Create versions.yaml
-        uses: mikefarah/yq@v4.43.1
+        uses: mikefarah/yq@v4.44.1
         if: github.event.inputs.deploy == 'true'
         with:
           cmd: yq -i e '.${{ github.event.repository.name }} = "${{ steps.date.outputs.date }}"' releases/versions.yaml
