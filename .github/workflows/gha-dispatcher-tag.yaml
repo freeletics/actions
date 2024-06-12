@@ -38,7 +38,7 @@ jobs:
           cancel_others: "true"
 
       - name: Check out code
-        uses: actions/checkout@v4.1.6
+        uses: actions/checkout@v4.1.7
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4.0.2
