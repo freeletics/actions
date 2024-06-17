@@ -57,7 +57,7 @@ jobs:
             type=ref,enable=true,priority=600,prefix=gha-prod-,suffix=,event=tag
             type=ref,enable=true,priority=600,prefix=gha-,suffix=,event=pr
 
-      - uses: docker/build-push-action@v5
+      - uses: docker/build-push-action@v6
         name: Build with plain docker
         with:
           push: true
