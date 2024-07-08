@@ -68,7 +68,7 @@ jobs:
 
       - name: '[WEB SSR] Compress Artifacts'
         run: |
-          tar -czf public.tar.gz ${{ github.workspace }}/public ${{ github.workspace }}/.next/standalone ${{ github.workspace }}/.next/static
+          tar -czf public.tar.gz ${{ github.workspace }}/public ${{ github.workspace }}/.next/standalone ${{ github.workspace }}/.next/static ${{ github.workspace }}/next.config.js ${{ github.workspace }}/yarn.lock
     
       - name: Archive production artifacts
         uses: actions/upload-artifact@v4
