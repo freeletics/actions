@@ -42,10 +42,15 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v4
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8
+
       - name: Use Node.js
         uses: actions/setup-node@v4.0.2
         with:
-          node-version: '18.12.1'
+          node-version: '18.20.3'
       - name: Login to NPM 
         run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" >> .npmrc
       - name: Check if login is successfull 
@@ -58,10 +63,10 @@ jobs:
           key: ${{ runner.os }}-nextjs-${{ hashFiles('**/package.json') }}
 
       - name: 'Install deps'
-        run: yarn install
+        run: pnpm install --frozen-lockfile
 
       - name: Build
-        run: yarn build
+        run: pnpm build
         env:
           NODE_ENV: "production"
           CI: false
