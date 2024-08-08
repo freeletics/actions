@@ -33,6 +33,7 @@ permissions:
   id-token: write
   contents: read
   actions: write
+  deployments: write
 
 jobs:
   build:
@@ -93,13 +94,18 @@ jobs:
           cache: ${{ inputs.KANIKO_CACHE }}
           cache-repository: ${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/kaniko-cache
 
-  jira_markers:
-    needs: build
-    name: Check for Jira tickets
-    permissions:
-      id-token: write
-      contents: read
-      actions: write
-    uses: freeletics/actions/.github/workflows/call-webhook.yaml@main
-    with:
-      URL: "https://webhook.site/a4328475-c2fe-463a-9478-2c9ceafd7392"
+      - uses: chrnorm/deployment-action@v2
+        name: Create GitHub deployment
+        id: deployment
+        with:
+          token: '${{ github.token }}'
+          environment: integration
+          initial-status: in_progress
+          payload: "{\"docker_image_tag\":\"gha-deploy-int-${{ steps.timestamp.outputs.date }}\"}"
+      - name: Update deployment status (in_progress)
+        uses: chrnorm/deployment-status@v2
+        with:
+          token: '${{ github.token }}'
+          environment-url: http://my-app-url.com
+          state: 'in_progress'
+          deployment-id: ${{ steps.deployment.outputs.deployment_id }}
