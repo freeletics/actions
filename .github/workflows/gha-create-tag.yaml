@@ -53,7 +53,7 @@ jobs:
         id: deployment
         with:
           token: '${{ github.token }}'
-          environment: integration
+          environment: production
           initial-status: in_progress
           payload: "{\"docker_image_tag\":\"deploy-prod-${{ steps.date.outputs.date }}\"}"
       - name: Update deployment status (in_progress)
