@@ -11,6 +11,11 @@ on:
         required: false
         type: string
         default: "Dockerfile"
+      deployment_type:
+        required: false
+        description: "Used to identify if a deployment was triggered manually or on PR merge"
+        type: string
+        default: "auto"
 
 permissions:
   id-token: write
@@ -110,16 +115,33 @@ jobs:
       AWS_REGION: "eu-west-1"
       AWS_ACCOUNT_ID: "524690225562"
     secrets: inherit
-
   integration:
-    if: contains(github.ref, 'refs/heads/') && inputs.APP_ENV != 'qa'
+    if: contains(github.ref, 'refs/heads/') && inputs.APP_ENV != 'qa' && inputs.deployment_type == 'auto'
     needs: build
     name: Deploy to integration
     permissions:
       id-token: write
       contents: read
       actions: write
+      deployments: write
     uses: freeletics/actions/.github/workflows/gha-auto-deploy-integration.yaml@main
+    with:
+      ARTIFACTS_NAME: "public"
+      ARTIFACTS_COMPRESSED: true
+      DOCKERFILE: "Dockerfile.gha"
+      AWS_REGION: "eu-west-1"
+      AWS_ACCOUNT_ID: "524690225562"
+    secrets: inherit
+  integration_manual:
+    if: contains(github.ref, 'refs/heads/') && inputs.APP_ENV != 'qa' && inputs.deployment_type == 'manual'
+    needs: build
+    name: Deploy to integration
+    permissions:
+      id-token: write
+      contents: read
+      actions: write
+      deployments: write
+    uses: freeletics/actions/.github/workflows/gha-deploy-integration.yaml@main
     with:
       ARTIFACTS_NAME: "public"
       ARTIFACTS_COMPRESSED: true
