@@ -12,6 +12,7 @@ permissions:
   id-token: write
   contents: read
   actions: write
+  deployments: write
 
 jobs:
   build:
@@ -47,7 +48,23 @@ jobs:
               ref: "refs/tags/deploy-prod-${{ steps.date.outputs.date }}",
               sha: context.sha
             })
-      # adding this here so if the repo doe not have the release workflow it will update here
+      - uses: chrnorm/deployment-action@v2
+        name: Create GitHub deployment
+        id: deployment
+        with:
+          token: '${{ github.token }}'
+          environment: production
+          initial-status: in_progress
+          payload: "{\"docker_image_tag\":\"deploy-prod-${{ steps.date.outputs.date }}\"}"
+      - name: Update deployment status (in_progress)
+        uses: chrnorm/deployment-status@v2
+        with:
+          token: '${{ github.token }}'
+          environment-url: http://my-app-url.com
+          state: 'in_progress'
+          deployment-id: ${{ steps.deployment.outputs.deployment_id }}
+
+      # adding this here so if the repo do not have the release workflow it will update here
       ##### Git versions ####
       - name: Check out code
         uses: actions/checkout@v4
