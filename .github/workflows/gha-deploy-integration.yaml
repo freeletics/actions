@@ -40,11 +40,11 @@ jobs:
     name: Build Docker image
     runs-on: ubuntu-latest
     steps:
-      # - name: Show GitHub context   
-      #   env: 
-      #     GITHUB_CONTEXT: ${{ toJson(github) }}   
-      #   run: echo "$GITHUB_CONTEXT"
-      #   shell: bash
+      - name: Show GitHub context   
+        env: 
+          GITHUB_CONTEXT: ${{ toJson(github) }}   
+        run: echo "$GITHUB_CONTEXT"
+        shell: bash
       - name: Skip Duplicate Actions
         uses: fkirc/skip-duplicate-actions@v5.3.1
         with:
