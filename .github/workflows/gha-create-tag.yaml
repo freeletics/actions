@@ -54,13 +54,13 @@ jobs:
         with:
           token: '${{ github.token }}'
           environment: production
+          environment-url: 'https://www.freeletics.com'
           initial-status: in_progress
-          payload: "{\"docker_image_tag\":\"deploy-prod-${{ steps.date.outputs.date }}\"}"
+          payload: "{\"docker_image_tag\":\"deploy-prod-${{ steps.date.outputs.date }}\",\"deployed_by\":\"${{github.actor}}\"}"
       - name: Update deployment status (in_progress)
         uses: chrnorm/deployment-status@v2
         with:
           token: '${{ github.token }}'
-          environment-url: http://my-app-url.com
           state: 'in_progress'
           deployment-id: ${{ steps.deployment.outputs.deployment_id }}
 

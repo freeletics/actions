@@ -100,12 +100,12 @@ jobs:
         with:
           token: '${{ github.token }}'
           environment: integration
+          environment-url: 'https://integration-www.freeletics.com'
           initial-status: in_progress
-          payload: "{\"docker_image_tag\":\"gha-deploy-int-${{ steps.timestamp.outputs.date }}\"}"
+          payload: "{\"docker_image_tag\":\"gha-deploy-int-${{ steps.timestamp.outputs.date }}\",\"deployed_by\":\"${{github.actor}}\"}"
       - name: Update deployment status (in_progress)
         uses: chrnorm/deployment-status@v2
         with:
           token: '${{ github.token }}'
-          environment-url: http://my-app-url.com
           state: 'in_progress'
           deployment-id: ${{ steps.deployment.outputs.deployment_id }}
