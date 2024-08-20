@@ -53,7 +53,7 @@ jobs:
           version: 8
 
       - name: Use Node.js
-        uses: actions/setup-node@v4.0.2
+        uses: actions/setup-node@v4.0.3
         with:
           node-version: '18.20.3'
       - name: Login to NPM 
