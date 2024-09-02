@@ -31,25 +31,25 @@ jobs:
     name: Build app
     runs-on: ubuntu-latest
     steps:
-################################# PRE STEPS ###############################################
+      ################################# PRE STEPS ###############################################
       - name: Skip Duplicate Actions
         uses: fkirc/skip-duplicate-actions@v5.3.1
         with:
           concurrent_skipping: "same_content"
           cancel_others: "true"
-          
+
       - name: Check out code
         uses: actions/checkout@v4
 
       - name: Use Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18.12.1'
+          node-version: "20.14.0"
 
-      - name: Login to NPM 
+      - name: Login to NPM
         run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" >> .npmrc
 
-      - name: 'Cache yarn modules'
+      - name: "Cache yarn modules"
         if: github.event.repository.name == 'web-service-main'
         uses: actions/cache@v4
         with:
@@ -60,10 +60,9 @@ jobs:
           key: ${{ runner.os }}-${{ env.APP_ENV }}-build-${{ github.event.repository.name }}-${{ github.run_id }}
           restore-keys: |
             ${{ runner.os }}-${{ env.APP_ENV }}-build-${{ github.event.repository.name }}-
-##########################################################################################
-
-####################################### BUILD STEP #######################################
-      - name: 'Install deps'
+      ##########################################################################################
+      ####################################### BUILD STEP #######################################
+      - name: "Install deps"
         run: yarn install
 
       - name: Build
@@ -73,24 +72,22 @@ jobs:
           CI: false
           APP_ENV: "${{ env.APP_ENV }}"
           GATSBY_APP_ENV: "${{ env.APP_ENV }}"
-##########################################################################################
+      ##########################################################################################
 
-################################## WEB BLOG ##############################################
-      - name: '[WEB BLOG] Compress Artifacts'
+      ################################## WEB BLOG ##############################################
+      - name: "[WEB BLOG] Compress Artifacts"
         if: github.event.repository.name == 'web-blog'
         run: |
           cp Docker/sitemap-index-blog.xml public/
           tar -czf public.tar.gz public
-##########################################################################################
-
-################################## WEB ###################################################
-      - name: '[WEB] Compress Artifacts'
+      ##########################################################################################
+      ################################## WEB ###################################################
+      - name: "[WEB] Compress Artifacts"
         if: github.event.repository.name == 'web-service-main'
         run: |
           tar -czf public.tar.gz dist
-##########################################################################################
-
-################################## COMMON STEPS ##########################################
+      ##########################################################################################
+      ################################## COMMON STEPS ##########################################
       - name: Archive production artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -149,7 +146,7 @@ jobs:
       AWS_REGION: "eu-west-1"
       AWS_ACCOUNT_ID: "524690225562"
     secrets: inherit
-    
+
   qa:
     if: contains(github.ref, 'refs/heads/') && inputs.APP_ENV == 'qa'
     needs: build
