@@ -32,7 +32,7 @@ env:
 jobs:
   Tests:
     # You must use a Linux environment when using service containers or container jobs
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     env:
       RAILS_ENV: test
       TEST_DATABASE_URL: "postgres:///${{inputs.test_database_name || github.event.repository.name}}"
@@ -89,7 +89,7 @@ jobs:
         id: test_job_result
         run: echo "test_job_result=${{job.status}}" >> $GITHUB_OUTPUT
   Linters:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     outputs:
       linters_job_result: ${{ steps.linters_job_result.outputs.linters_job_result }}
     steps:
