@@ -82,7 +82,7 @@ jobs:
           tags: |
             type=sha,enable=true,priority=600,prefix=qa-,suffix=
 
-      - uses: int128/kaniko-action@v1.43.0
+      - uses: int128/kaniko-action@v1.48.0
         name: Build with Kaniko
         with:
           push: true

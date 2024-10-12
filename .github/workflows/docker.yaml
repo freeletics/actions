@@ -88,7 +88,7 @@ jobs:
             type=ref,enable=true,priority=600,prefix=,suffix=,event=tag
             type=ref,enable=true,priority=600,prefix=gha-,suffix=,event=pr
 
-      - uses: int128/kaniko-action@v1.43.0
+      - uses: int128/kaniko-action@v1.48.0
         name: Build with Kaniko
         with:
           push: true
