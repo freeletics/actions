@@ -53,6 +53,8 @@ jobs:
     outputs:
       test_job_result: ${{ steps.test_job_result.outputs.test_job_result }}
     steps:
+      - name: Install ImageMagick
+        run: sudo apt install imagemagick
       - name: Skip Duplicate Actions
         uses: fkirc/skip-duplicate-actions@v5.3.1
         with:
