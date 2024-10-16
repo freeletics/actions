@@ -32,7 +32,7 @@ env:
 jobs:
   Tests:
     # You must use a Linux environment when using service containers or container jobs
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     env:
       RAILS_ENV: test
       TEST_DATABASE_URL: "postgres:///${{inputs.test_database_name || github.event.repository.name}}"
@@ -53,6 +53,8 @@ jobs:
     outputs:
       test_job_result: ${{ steps.test_job_result.outputs.test_job_result }}
     steps:
+      - name: Install ImageMagick
+        run: sudo apt install imagemagick
       - name: Skip Duplicate Actions
         uses: fkirc/skip-duplicate-actions@v5.3.1
         with:
@@ -89,10 +91,12 @@ jobs:
         id: test_job_result
         run: echo "test_job_result=${{job.status}}" >> $GITHUB_OUTPUT
   Linters:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     outputs:
       linters_job_result: ${{ steps.linters_job_result.outputs.linters_job_result }}
     steps:
+      # - name: Install ImageMagick
+      #   run: sudo apt install imagemagick
       - name: Checkout code
         uses: actions/checkout@v4
         with:
