@@ -18,8 +18,8 @@
   ignoreDeps: [
   ],
   packageRules: [
-    "description": "Auto-merge minor and patch dependency updates.",
-    "matchUpdateTypes": ["minor", "patch"],
-    "automerge": true
+    description: "Auto-merge minor and patch dependency updates.",
+    matchUpdateTypes: ["minor", "patch"],
+    automerge: true
   ]
 }
