@@ -36,7 +36,7 @@ jobs:
       # Step 1: Fetch Failed Steps
       - name: Fetch Failed Steps
         id: fetch_failures
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -108,7 +108,7 @@ jobs:
       # Step 3: Create GitHub Issue with Bot's Analysis
       - name: Create GitHub Issue with Analysis
         if: steps.bot_response.outputs.analysis != ''
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
