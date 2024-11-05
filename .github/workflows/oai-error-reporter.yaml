@@ -15,15 +15,15 @@ on:
         description: 'The API endpoint for OpenWebUI.'
         required: true
         type: string
-      api_key:
-        description: 'The API key for OpenWebUI.'
-        required: true
-        type: string
       issue_label:
         description: 'Labels to add to the created GitHub issue.'
         required: false
         default: 'ci-failure'
         type: string
+    secrets:
+      OPENWEBUI_API_KEY:
+        description: 'The API key for OpenWebUI.'
+        required: true
 
 permissions:
   issues: write
@@ -100,7 +100,7 @@ jobs:
 
           # Send the POST request and capture the response
           RESPONSE=$(curl -s -X POST "${{ inputs.endpoint }}" \
-            -H "Authorization: Bearer ${{ inputs.api_key }}" \
+            -H "Authorization: Bearer ${{ secrets.OPENWEBUI_API_KEY }}" \
             -H "Content-Type: application/json" \
             -d "$PAYLOAD")
 
@@ -166,3 +166,40 @@ jobs:
             } else {
               console.log("An issue for CI failures already exists.");
             }
+    ```
+
+### Key Changes:
+
+1. **Defining `api_key` as a Secret:**
+   - In the `workflow_call` inputs, remove `api_key` and define it under `secrets` as `OPENWEBUI_API_KEY`.
+
+2. **Accessing `api_key` Securely:**
+   - In the `Send Errors to OpenWebUI and Get Analysis` step, access the `api_key` using `${{ secrets.OPENWEBUI_API_KEY }}` instead of `inputs.api_key`.
+
+3. **Removing `api_key` from Inputs:**
+   - By defining `api_key` as a secret, we avoid exposing it as an input, enhancing security.
+
+4. **Permissions:**
+   - The `permissions` block grants the necessary permissions without overstepping. Ensure these are adequate for your use case.
+
+---
+
+## 4. Updating the Primary Workflow
+
+With the reusable workflow updated to accept `api_key` as a secret (`OPENWEBUI_API_KEY`), you need to adjust your primary workflow (`tester.yaml`) to pass the secret correctly via the `secrets:` block instead of the `with:` block.
+
+### Correcting the `report_errors` Job
+
+**Original `report_errors` Job:**
+
+```yaml
+report_errors:
+  needs: manifests
+  if: failure()
+  uses: freeletics/actions/.github/workflows/oai-error-reporter.yaml@main
+  with:
+    job_name: "manifests"
+    model: "qwen2.5:0.5b"
+    endpoint: "https://oai-int.freeletics.com/api/chat/completions"
+    api_key: "${{ secrets.OAI_INT_GITHUB_CI_API_KEY }}"
+    issue_label: "ci-failure"
