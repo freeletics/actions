@@ -35,8 +35,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Fetch Failed Steps
-      - name: Fetch Failed Steps
+      # Step 1: Fetch Failed Steps and Their Logs
+      - name: Fetch Failed Steps and Logs
         id: fetch_failures
         uses: actions/github-script@v6
         with:
@@ -44,6 +44,8 @@ jobs:
           script: |
             const jobName = '${{ inputs.job_name }}';
             const runId = context.runId;
+            
+            // Get all jobs from the workflow run
             const { data: jobs } = await github.rest.actions.listJobsForWorkflowRun({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -51,16 +53,22 @@ jobs:
             });
 
             const targetJob = jobs.jobs.find(job => job.name === jobName);
-
             if (!targetJob) {
               throw new Error(`Job "${jobName}" not found.`);
             }
 
-            const failedSteps = targetJob.steps.filter(step => step.conclusion === 'failure');
+            // Get the logs for the job
+            const logs = await github.rest.actions.downloadJobLogsForWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              job_id: targetJob.id,
+              accept: 'application/vnd.github.v3+json',
+            });
 
+            const failedSteps = targetJob.steps.filter(step => step.conclusion === 'failure');
             if (failedSteps.length === 0) {
               core.info(`No failed steps found in job "${jobName}".`);
-              return { failures: '' };
+              return { failures: '', logs: '' };
             }
 
             let summary = '';
@@ -68,7 +76,9 @@ jobs:
               summary += `- **${step.name}**: ${step.conclusion}\n`;
             });
 
+            // Set both the summary and full logs as outputs
             core.setOutput('failures', summary);
+            core.setOutput('logs', Buffer.from(logs.data).toString('base64'));
 
       # Step 2: Send Errors to OpenWebUI and Get Analysis
       - name: Send Errors to OpenWebUI and Get Analysis
@@ -84,10 +94,13 @@ jobs:
               sudo apt-get update && sudo apt-get install -y jq
           fi
 
+          # Decode the base64 logs
+          FULL_LOGS=$(echo "${{ steps.fetch_failures.outputs.logs }}" | base64 -d)
+
           # Prepare the JSON payload using inputs
           PAYLOAD=$(jq -n \
             --arg model "${{ inputs.model }}" \
-            --arg content "The following steps have failed in the job \"${{ inputs.job_name }}\":\n${{ steps.fetch_failures.outputs.failures }}\n\nPlease analyze these errors and provide recommendations." \
+            --arg content "The following steps have failed in the job \"${{ inputs.job_name }}\":\n${{ steps.fetch_failures.outputs.failures }}\n\nFull job logs:\n${FULL_LOGS}\n\nPlease analyze these errors, identify the root cause, and provide specific recommendations for fixing the issues." \
             '{
               model: $model,
               messages: [
