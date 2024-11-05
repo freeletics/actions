@@ -24,9 +24,11 @@ on:
         required: false
         default: 'ci-failure'
         type: string
-    secrets:
-      GITHUB_TOKEN:
-        required: true
+
+permissions:
+  issues: write
+  actions: read
+  contents: read
 
 jobs:
   report_errors:
@@ -68,14 +70,21 @@ jobs:
 
             core.setOutput('failures', summary);
 
-      # Step 2: Send Errors to OpenWebUI and Capture Bot's Response
+      # Step 2: Send Errors to OpenWebUI and Get Analysis
       - name: Send Errors to OpenWebUI and Get Analysis
         id: bot_response
         if: steps.fetch_failures.outputs.failures != ''
         run: |
           echo "Sending errors to OpenWebUI..."
 
-          # Prepare the JSON payload using env variables
+          # Ensure jq is installed
+          if ! command -v jq &> /dev/null
+          then
+              echo "jq could not be found. Installing..."
+              sudo apt-get update && sudo apt-get install -y jq
+          fi
+
+          # Prepare the JSON payload using inputs
           PAYLOAD=$(jq -n \
             --arg model "${{ inputs.model }}" \
             --arg content "The following steps have failed in the job \"${{ inputs.job_name }}\":\n${{ steps.fetch_failures.outputs.failures }}\n\nPlease analyze these errors and provide recommendations." \
@@ -147,8 +156,8 @@ jobs:
 
             if (!issueExists) {
               await github.rest.issues.create({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
+                owner,
+                repo,
                 title: issueTitle,
                 body: issueBody,
                 labels: ['${{ inputs.issue_label }}']
