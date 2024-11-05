@@ -102,9 +102,7 @@ jobs:
           RESPONSE=$(curl -s -X POST "${{ inputs.endpoint }}" \
             -H "Authorization: Bearer ${{ secrets.OPENWEBUI_API_KEY }}" \
             -H "Content-Type: application/json" \
-            -d "$PAYLOAD"
-
-          )
+            -d "$PAYLOAD")
 
           echo "Response from OpenWebUI: $RESPONSE"
 
@@ -126,7 +124,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            // Extract outputs
+            // Safely parse the JSON strings
             const analysis = JSON.parse('${{ toJson(steps.bot_response.outputs.analysis) }}');
             const failures = JSON.parse('${{ toJson(steps.fetch_failures.outputs.failures) }}');
 
@@ -151,7 +149,6 @@ jobs:
             Please review the failures and follow the bot's recommendations to resolve the issues.
             `;
 
-            // Define owner and repo from context
             const owner = context.repo.owner;
             const repo = context.repo.repo;
 
