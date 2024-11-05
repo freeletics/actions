@@ -86,16 +86,32 @@ jobs:
               sudo apt-get update && sudo apt-get install -y jq
           fi
 
-          # Create JSON payload with proper escaping
+          # Decode logs first
+          DECODED_LOGS=$(echo "${{ steps.fetch_failures.outputs.logs }}" | base64 -d)
+          
+          # Create message content first
+          MESSAGE_CONTENT=$(cat << EOF
+          Analyze these CI failures:
+
+          Failed Steps:
+          ${{ steps.fetch_failures.outputs.failures }}
+
+          Full Logs:
+          $DECODED_LOGS
+
+          Please identify the root cause and provide specific recommendations.
+          EOF
+          )
+
+          # Create JSON payload using proper jq string interpolation
           PAYLOAD=$(jq -n \
             --arg model "${{ inputs.model }}" \
-            --arg failures "${{ steps.fetch_failures.outputs.failures }}" \
-            --arg logs "$(echo "${{ steps.fetch_failures.outputs.logs }}" | base64 -d)" \
+            --arg content "$MESSAGE_CONTENT" \
             '{
               model: $model,
               messages: [{
                 role: "user",
-                content: "Analyze these CI failures:\n\nFailed Steps:\n" + $failures + "\n\nFull Logs:\n" + $logs + "\n\nPlease identify the root cause and provide specific recommendations."
+                content: $content
               }]
             }')
 
