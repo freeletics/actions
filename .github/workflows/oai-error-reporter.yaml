@@ -154,7 +154,7 @@ jobs:
             const analysis = Buffer.from('${{ steps.bot_response.outputs.analysis }}', 'base64').toString();
             const failures = `${{ steps.fetch_failures.outputs.failures }}`;
 
-            const issueTitle = "⚠️ CI Pipeline Failures Detected";
+            const issueTitle = "⚠️ CI Pipeline Failures Detected: \`${context.runId}\`";
             const issueBody = `
             **CI Pipeline Failures Summary:**
             \`\`\`
