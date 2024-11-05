@@ -104,13 +104,9 @@ jobs:
             -H "Content-Type: application/json" \
             -d "$PAYLOAD")
 
-          echo "Response from OpenWebUI: $RESPONSE"
-
-          # Extract the bot's message using jq and encode it for GitHub Actions
-          BOT_MESSAGE=$(echo "$RESPONSE" | jq -r '.choices[0].message.content' |python3 -c 'import sys, json; print(json.dumps(sys.stdin.read()))')
-
-          # Set the bot's message as an output using the proper GitHub Actions syntax
-          echo "analysis=${BOT_MESSAGE}" >> $GITHUB_OUTPUT
+          # Extract the bot's message and store it as a base64-encoded string
+          BOT_MESSAGE=$(echo "$RESPONSE" | jq -r '.choices[0].message.content' | base64 -w 0)
+          echo "analysis=$BOT_MESSAGE" >> $GITHUB_OUTPUT
 
       # Step 3: Create GitHub Issue with Bot's Analysis
       - name: Create GitHub Issue with Analysis
@@ -119,7 +115,8 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const analysis = JSON.parse(${{ steps.bot_response.outputs.analysis }});
+            // Decode the base64-encoded analysis
+            const analysis = Buffer.from('${{ steps.bot_response.outputs.analysis }}', 'base64').toString();
             const failures = `${{ steps.fetch_failures.outputs.failures }}`;
 
             const issueTitle = "⚠️ CI Pipeline Failures Detected";
