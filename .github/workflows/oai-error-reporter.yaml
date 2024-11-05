@@ -144,10 +144,14 @@ jobs:
             Please review the failures and follow the bot's recommendations to resolve the issues.
             `;
 
+            // Define owner and repo from context
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
             // Check if an issue with the same title already exists
             const { data: existingIssues } = await github.rest.issues.listForRepo({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
+              owner: owner,
+              repo: repo,
               state: 'open',
               labels: ['${{ inputs.issue_label }}'],
             });
@@ -156,8 +160,8 @@ jobs:
 
             if (!issueExists) {
               await github.rest.issues.create({
-                owner,
-                repo,
+                owner: owner,
+                repo: repo,
                 title: issueTitle,
                 body: issueBody,
                 labels: ['${{ inputs.issue_label }}']
