@@ -107,10 +107,7 @@ jobs:
           echo "Response from OpenWebUI: $RESPONSE"
 
           # Extract the bot's message using jq and encode it for GitHub Actions
-          BOT_MESSAGE=$(echo "$RESPONSE" | jq -r '.choices[0].message.content' | python3 -c '
-import sys, json
-print(json.dumps(sys.stdin.read()))
-          ')
+          BOT_MESSAGE=$(echo "$RESPONSE" | jq -r '.choices[0].message.content' |python3 -c 'import sys, json; print(json.dumps(sys.stdin.read()))')
 
           # Set the bot's message as an output using the proper GitHub Actions syntax
           echo "analysis=${BOT_MESSAGE}" >> $GITHUB_OUTPUT
