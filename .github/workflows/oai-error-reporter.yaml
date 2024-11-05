@@ -1,4 +1,5 @@
-name: OAI Error Reporter
+
+name: Error Reporter
 
 on:
   workflow_call:
@@ -111,13 +112,11 @@ jobs:
 
           echo "Bot's analysis: $BOT_MESSAGE"
 
-          # Sanitize BOT_MESSAGE to prevent GitHub Actions file command errors
-          SANITIZED_BOT_MESSAGE=$(echo "$BOT_MESSAGE" | sed 's/\\/\\\\/g' | sed 's/\$/\\$/g')
+          # Encode BOT_MESSAGE using Base64 to safely pass multi-line content
+          ENCODED_BOT_MESSAGE=$(echo "$BOT_MESSAGE" | base64)
 
-          # Set the bot's message as an output with multi-line support
-          echo "analysis<<EOF" >> $GITHUB_OUTPUT
-          echo "$SANITIZED_BOT_MESSAGE" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          # Set the encoded bot's message as an output
+          echo "analysis=$ENCODED_BOT_MESSAGE" >> $GITHUB_OUTPUT
 
       # Step 3: Create GitHub Issue with Bot's Analysis
       - name: Create GitHub Issue with Analysis
@@ -126,11 +125,53 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            // Safely parse the JSON strings
-            const analysis = JSON.parse('${{ toJson(steps.bot_response.outputs.analysis) }}');
-            const failures = JSON.parse('${{ toJson(steps.fetch_failures.outputs.failures) }}');
+            // Decode the Base64 encoded outputs
+            const analysis = Buffer.from('${{ steps.bot_response.outputs.analysis }}', 'base64').toString('utf-8');
+            const failures = '${{ steps.fetch_failures.outputs.failures }}';
 
             const issueTitle = "⚠️ CI Pipeline Failures Detected";
             const issueBody = `
             **CI Pipeline Failures Summary:**
-  
+            \`\`\`
+            ${failures}
+            \`\`\`
+
+            **Bot Analysis and Recommendations:**
+            \`\`\`
+            ${analysis}
+            \`\`\`
+
+            **Workflow Run Details:**
+            - Repository: \`${context.repo.owner}/${context.repo.repo}\`
+            - Workflow: \`${context.workflow}\`
+            - Run ID: \`${context.runId}\`
+            - Run URL: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}
+
+            Please review the failures and follow the bot's recommendations to resolve the issues.
+            `;
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            // Check if an issue with the same title already exists
+            const { data: existingIssues } = await github.rest.issues.listForRepo({
+              owner: owner,
+              repo: repo,
+              state: 'open',
+              labels: ['${{ inputs.issue_label }}'],
+            });
+
+            const issueExists = existingIssues.some(issue => issue.title === issueTitle);
+
+            if (!issueExists) {
+              await github.rest.issues.create({
+                owner: owner,
+                repo: repo,
+                title: issueTitle,
+                body: issueBody,
+                labels: ['${{ inputs.issue_label }}']
+              });
+              console.log("GitHub issue with bot analysis created successfully.");
+            } else {
+              console.log("An issue for CI failures already exists.");
+            }
