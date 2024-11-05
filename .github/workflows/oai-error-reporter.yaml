@@ -106,16 +106,14 @@ jobs:
 
           echo "Response from OpenWebUI: $RESPONSE"
 
-          # Extract the bot's message using jq
-          BOT_MESSAGE=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
+          # Extract the bot's message using jq and encode it for GitHub Actions
+          BOT_MESSAGE=$(echo "$RESPONSE" | jq -r '.choices[0].message.content' | python3 -c '
+import sys, json
+print(json.dumps(sys.stdin.read()))
+          ')
 
-          echo "Bot's analysis: $BOT_MESSAGE"
-
-          # Sanitize BOT_MESSAGE to prevent GitHub Actions file command errors
-          SANITIZED_BOT_MESSAGE=$(echo "$BOT_MESSAGE" | sed 's/\\/\\\\/g' | sed 's/\$/\\$/g')
-
-          # Set the bot's message as an output
-          echo "analysis=$SANITIZED_BOT_MESSAGE" >> $GITHUB_OUTPUT
+          # Set the bot's message as an output using the proper GitHub Actions syntax
+          echo "analysis=${BOT_MESSAGE}" >> $GITHUB_OUTPUT
 
       # Step 3: Create GitHub Issue with Bot's Analysis
       - name: Create GitHub Issue with Analysis
@@ -124,9 +122,8 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            // Safely parse the JSON strings
-            const analysis = JSON.parse('${{ toJson(steps.bot_response.outputs.analysis) }}');
-            const failures = JSON.parse('${{ toJson(steps.fetch_failures.outputs.failures) }}');
+            const analysis = JSON.parse(${{ steps.bot_response.outputs.analysis }});
+            const failures = `${{ steps.fetch_failures.outputs.failures }}`;
 
             const issueTitle = "⚠️ CI Pipeline Failures Detected";
             const issueBody = `
