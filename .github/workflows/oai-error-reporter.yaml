@@ -96,11 +96,19 @@ jobs:
 
           # Decode the base64 logs
           FULL_LOGS=$(echo "${{ steps.fetch_failures.outputs.logs }}" | base64 -d)
+          
+          # Create a temporary file for the content
+          CONTENT_FILE=$(mktemp)
+          echo "The following steps have failed in the job \"${{ inputs.job_name }}\":" > "$CONTENT_FILE"
+          echo "${{ steps.fetch_failures.outputs.failures }}" >> "$CONTENT_FILE"
+          echo -e "\nFull job logs:" >> "$CONTENT_FILE"
+          echo "$FULL_LOGS" >> "$CONTENT_FILE"
+          echo -e "\nPlease analyze these errors, identify the root cause, and provide specific recommendations for fixing the issues." >> "$CONTENT_FILE"
 
-          # Prepare the JSON payload using inputs
+          # Create the JSON payload using the content file
           PAYLOAD=$(jq -n \
             --arg model "${{ inputs.model }}" \
-            --arg content "The following steps have failed in the job \"${{ inputs.job_name }}\":\n${{ steps.fetch_failures.outputs.failures }}\n\nFull job logs:\n${FULL_LOGS}\n\nPlease analyze these errors, identify the root cause, and provide specific recommendations for fixing the issues." \
+            --rawfile content "$CONTENT_FILE" \
             '{
               model: $model,
               messages: [
@@ -117,11 +125,14 @@ jobs:
             -H "Content-Type: application/json" \
             -d "$PAYLOAD")
 
+          # Clean up the temporary file
+          rm "$CONTENT_FILE"
+
           # Extract the bot's message and store it as a base64-encoded string
           BOT_MESSAGE=$(echo "$RESPONSE" | jq -r '.choices[0].message.content' | base64 -w 0)
           echo "analysis=$BOT_MESSAGE" >> $GITHUB_OUTPUT
 
-      # Step 3: Create GitHub Issue with Bot's Analysis
+      # Step 3: Create GitHub Issue with Analysis
       - name: Create GitHub Issue with Analysis
         if: steps.bot_response.outputs.analysis != ''
         uses: actions/github-script@v6
