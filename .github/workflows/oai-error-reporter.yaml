@@ -80,7 +80,6 @@ jobs:
             core.setOutput('failures', summary);
             core.setOutput('logs', Buffer.from(logs.data).toString('base64'));
 
-      # Step 2: Send Errors to OpenWebUI and Get Analysis
       - name: Send Errors to OpenWebUI and Get Analysis
         id: bot_response
         if: steps.fetch_failures.outputs.failures != ''
@@ -94,8 +93,8 @@ jobs:
               sudo apt-get update && sudo apt-get install -y jq
           fi
 
-          # Decode the base64 logs
-          FULL_LOGS=$(echo "${{ steps.fetch_failures.outputs.logs }}" | base64 -d)
+          # Decode the base64 logs and ensure it's properly formatted
+          FULL_LOGS=$(echo "${{ steps.fetch_failures.outputs.logs }}" | base64 -d | sed 's/\\/\\\\/g' | sed 's/"/\\"/g')
           
           # Create a temporary file for the content
           CONTENT_FILE=$(mktemp)
@@ -105,16 +104,18 @@ jobs:
           echo "$FULL_LOGS" >> "$CONTENT_FILE"
           echo -e "\nPlease analyze these errors, identify the root cause, and provide specific recommendations for fixing the issues." >> "$CONTENT_FILE"
 
-          # Create the JSON payload using the content file
+          # Create the JSON payload using the content file and ensure proper escaping
           PAYLOAD=$(jq -n \
             --arg model "${{ inputs.model }}" \
-            --rawfile content "$CONTENT_FILE" \
+            --raw-input \
+            --slurp \
+            --arg file "$(cat "$CONTENT_FILE")" \
             '{
               model: $model,
               messages: [
                 {
                   role: "user",
-                  content: $content
+                  content: $file
                 }
               ]
             }')
@@ -127,6 +128,12 @@ jobs:
 
           # Clean up the temporary file
           rm "$CONTENT_FILE"
+
+          # Ensure the response is valid JSON before processing
+          if ! echo "$RESPONSE" | jq empty; then
+            echo "Error: Invalid JSON response received"
+            exit 1
+          fi
 
           # Extract the bot's message and store it as a base64-encoded string
           BOT_MESSAGE=$(echo "$RESPONSE" | jq -r '.choices[0].message.content' | base64 -w 0)
