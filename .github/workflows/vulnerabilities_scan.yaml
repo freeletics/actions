@@ -1,0 +1,24 @@
+name: Vulnerabilities Scan
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  brakeman_scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip Duplicate Actions
+        uses: fkirc/skip-duplicate-actions@v5.3.1
+        with:
+          concurrent_skipping: "same_content"
+          cancel_others: "true"
+
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: "Brakeman Scan"
+        uses: artplan1/brakeman-action@v1.2.1
+        with:
+          flags: "--color"
