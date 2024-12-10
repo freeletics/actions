@@ -28,15 +28,13 @@ jobs:
       id: check_diff
       run: |
         # Get commits between the latest tag and master
-        latest_tag=${{ steps.latest_tag.outputs.latest_tag }}
-        commits=$(git log $latest_tag..HEAD --oneline)
-        echo "commits=$commits" >> $GITHUB_ENV
+        commits=$(git log ${{ steps.latest_tag.outputs.latest_tag }}..HEAD --oneline)
 
         if [ -z "$commits" ]; then
           echo "No new commits since the last deployed tag"
         else
           echo "There are new commits since the last deployed tag"
-          echo "send_deployment_reminder=true" >> $GITHUB_ENV
+          echo "send_deployment_reminder=true" >> $GITHUB_OUTPUT
         fi
 
     - name: Notify Slack
