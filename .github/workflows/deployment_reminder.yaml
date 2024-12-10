@@ -1,0 +1,66 @@
+name: Deployment Reminder
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  compare_commits:
+    runs-on: ubuntu-22.04
+
+    steps:
+
+    - name: Checkout Repository
+      uses: actions/checkout@v4.2.2
+      with:
+        fetch-depth: 0
+
+    - name: Get Latest Tag
+      id: latest_tag
+      run: |
+        latest_tag=$(git describe --tags $(git rev-list --tags --max-count=1))
+        echo "Latest tag: $latest_tag"
+        echo "latest_tag=$latest_tag" >> $GITHUB_ENV
+
+    - name: Compare Latest Tag with Master
+      id: check_diff
+      run: |
+        # Get commits between the latest tag and master
+        latest_tag=${{ steps.latest_tag.outputs.latest_tag }}
+        commits=$(git log $latest_tag..HEAD --oneline)
+        echo "commits=$commits" >> $GITHUB_ENV
+
+        if [ -z "$commits" ]; then
+          echo "No new commits since the last deployed tag"
+        else
+          echo "There are new commits since the last deployed tag"
+          echo "send_deployment_reminder=true" >> $GITHUB_ENV
+        fi
+
+    - name: Notify Slack
+      if: ${{ steps.check_diff.outputs.send_deployment_reminder == 'true' }}
+      uses: slackapi/slack-github-action@v2
+      with:
+        webhook: ${{secrets.DEPLOYMENT_REMINDER_SLACK_WEBHOOK}}
+        webhook-type: incoming-webhook
+        payload: |
+          blocks:
+            - type: "header"
+              text:
+                type: "plain_text"
+                text: "🚀 Deployment Reminder"
+            - type: "section"
+              fields:
+                - type:  "mrkdwn"
+                  text: "*Service:* <${{ github.server_url }}/${{ github.repository }}|${{ github.repository }}>"
+                - type:  "mrkdwn"
+                  text: "*Differences*: <${{ github.server_url }}/${{ github.repository }}/compare/${{ steps.latest_tag.outputs.latest_tag }}...master|View>"
+            - type: "actions"
+              elements:
+                - type: "button"
+                  text:
+                    type: "plain_text"
+                    text: "Deploy"
+                  url: "${{ github.server_url }}/${{ github.repository }}/actions/workflows/create-tag.yaml"
