@@ -35,7 +35,7 @@ jobs:
         if [ -z "$commits" ]; then
           echo "No new commits since the last deployed tag"
         else
-          echo "THere are new commits since the last deployed tag"
+          echo "There are new commits since the last deployed tag"
           echo "send_deployment_reminder=true" >> $GITHUB_ENV
         fi
 
@@ -56,7 +56,7 @@ jobs:
                 - type:  "mrkdwn"
                   text: "*Service:* <${{ github.server_url }}/${{ github.repository }}|${{ github.repository }}>"
                 - type:  "mrkdwn"
-                  text: "*Differences*: <${{ github.server_url }}/${{ github.repository }}/compare/$LATEST_TAG...master|View>"
+                  text: "*Differences*: <${{ github.server_url }}/${{ github.repository }}/compare/${{ steps.latest_tag.outputs.latest_tag }}...master|View>"
             - type: "actions"
               elements:
                 - type: "button"
