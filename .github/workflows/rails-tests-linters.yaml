@@ -37,6 +37,7 @@ jobs:
       RAILS_ENV: test
       TEST_DATABASE_URL: "postgres:///${{inputs.test_database_name || github.event.repository.name}}"
       TEST_CORE_ADMIN_DATABASE_URL: "postgres:///${{inputs.core_admin_test_database_name}}"
+      timeout-minutes: ${{ vars.RAILS_TEST_TIMEOUT_MINUTES }}
     services:
       postgres:
         image: postgres:16
@@ -94,6 +95,9 @@ jobs:
     runs-on: ubuntu-22.04
     outputs:
       linters_job_result: ${{ steps.linters_job_result.outputs.linters_job_result }}
+    env:
+      timeout-minutes: ${{ vars.RAILS_LINTER_TIMEOUT_MINUTES }}
+      GITHUB_OUTPUT: ${{ github.workspace }}/.github_output
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
