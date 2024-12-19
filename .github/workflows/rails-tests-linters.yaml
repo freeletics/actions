@@ -21,6 +21,14 @@ on:
         required: false
         type: string
         default: "false"
+      rails_test_timeout_minutes:
+        required: false
+        type: number
+        default: 3
+      rails_linter_timeout_minutes:
+        required: false
+        type: number
+        default: 1
 
 env:
   BUNDLE_GITHUB__COM: "${{ secrets.PRIVATE_GEMS_SECRET }}:x-oauth-basic"
@@ -33,6 +41,7 @@ jobs:
   Tests:
     # You must use a Linux environment when using service containers or container jobs
     runs-on: ubuntu-22.04
+    timeout-minutes: ${{ inputs.rails_test_timeout_minutes }}
     env:
       RAILS_ENV: test
       TEST_DATABASE_URL: "postgres:///${{inputs.test_database_name || github.event.repository.name}}"
@@ -91,9 +100,12 @@ jobs:
         id: test_job_result
         run: echo "test_job_result=${{job.status}}" >> $GITHUB_OUTPUT
   Linters:
+    timeout-minutes: ${{ inputs.rails_linter_timeout_minutes }}
     runs-on: ubuntu-22.04
     outputs:
       linters_job_result: ${{ steps.linters_job_result.outputs.linters_job_result }}
+    env:
+      GITHUB_OUTPUT: ${{ github.workspace }}/.github_output
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
