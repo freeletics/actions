@@ -24,11 +24,11 @@ on:
       rails_test_timeout_minutes:
         required: false
         type: number
-        default: 3
+        default: 5
       rails_linter_timeout_minutes:
         required: false
         type: number
-        default: 1
+        default: 2
 
 env:
   BUNDLE_GITHUB__COM: "${{ secrets.PRIVATE_GEMS_SECRET }}:x-oauth-basic"
