@@ -16,12 +16,16 @@ on:
         description: "Used to identify if a deployment was triggered manually or on PR merge"
         type: string
         default: "auto"
+      NODE_VERSION:
+        required: false
+        description: "Node.js version to use"
+        type: string
+        default: "22.13.1"
 
 permissions:
   id-token: write
   contents: read
   actions: write
-
 
 env:
   AWS_REGION: "eu-west-1"
@@ -43,7 +47,7 @@ jobs:
         with:
           concurrent_skipping: "same_content"
           cancel_others: "true"
-          
+
       - name: Check out code
         uses: actions/checkout@v4
 
@@ -55,10 +59,10 @@ jobs:
       - name: Use Node.js
         uses: actions/setup-node@v4.2.0
         with:
-          node-version: '18.20.3'
-      - name: Login to NPM 
+          node-version: "${{ inputs.NODE_VERSION }}"
+      - name: Login to NPM
         run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" >> .npmrc
-      - name: Check if login is successfull 
+      - name: Check if login is successfull
         run: npm whoami --registry=https://registry.npmjs.org
 
       - name: Cache nextjs
@@ -67,7 +71,7 @@ jobs:
           path: ${{ github.workspace }}/.next/cache
           key: ${{ runner.os }}-nextjs-${{ hashFiles('**/package.json') }}
 
-      - name: 'Install deps'
+      - name: "Install deps"
         run: pnpm install --frozen-lockfile
 
       - name: Build
@@ -76,10 +80,10 @@ jobs:
           NODE_ENV: "production"
           CI: false
 
-      - name: '[WEB SSR] Compress Artifacts'
+      - name: "[WEB SSR] Compress Artifacts"
         run: |
           tar -czf public.tar.gz ${{ github.workspace }}/public ${{ github.workspace }}/.next/standalone ${{ github.workspace }}/.next/static
-    
+
       - name: Archive production artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -139,9 +143,7 @@ jobs:
       AWS_REGION: "eu-west-1"
       AWS_ACCOUNT_ID: "524690225562"
     secrets: inherit
-    
 
-    
   qa:
     if: contains(github.ref, 'refs/heads/') && inputs.APP_ENV == 'qa'
     needs: build
