@@ -15,7 +15,7 @@ on:
         required: false
         description: "Used to identify if a deployment was triggered manually or on PR merge"
         type: string
-        default: "auto"
+        default: "no-deployment"
       NODE_VERSION:
         required: false
         description: "Node.js version to use"
