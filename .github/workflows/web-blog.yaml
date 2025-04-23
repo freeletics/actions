@@ -1,4 +1,4 @@
-name: "Web and blog Build with Docker Kaniko"
+name: "Blog Build with Docker Kaniko"
 
 on:
   workflow_call:
@@ -46,9 +46,6 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v4
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-
       - name: Use Node.js
         uses: actions/setup-node@v4
         with:
@@ -57,35 +54,28 @@ jobs:
       - name: Login to NPM
         run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" >> .npmrc
 
-      - name: "Cache node modules"
-        if: github.event.repository.name == 'web-service-main'
-        uses: actions/cache@v4
-        with:
-          path: |
-            node_modules
-            public
-            .cache
-          key: ${{ runner.os }}-${{ env.APP_ENV }}-build-${{ github.event.repository.name }}-${{ github.run_id }}
-          restore-keys: |
-            ${{ runner.os }}-${{ env.APP_ENV }}-build-${{ github.event.repository.name }}-
       ##########################################################################################
       ####################################### BUILD STEP #######################################
       - name: "Install deps"
-        run: pnpm install --frozen-lockfile
+        run: yarn install
 
       - name: Build
-        run: pnpm build
+        run: yarn build
         env:
           NODE_ENV: "production"
           CI: false
           APP_ENV: "${{ env.APP_ENV }}"
           GATSBY_APP_ENV: "${{ env.APP_ENV }}"
+      ##########################################################################################
 
-      - name: "[WEB] Compress Artifacts"
-        if: github.event.repository.name == 'web-service-main'
+      ################################## WEB BLOG ##############################################
+      - name: "[WEB BLOG] Compress Artifacts"
+        if: github.event.repository.name == 'web-blog'
         run: |
-          tar -czf public.tar.gz dist
-          
+          cp Docker/sitemap-index-blog.xml public/
+          tar -czf public.tar.gz public
+      ##########################################################################################
+      ################################## COMMON STEPS ##########################################
       - name: Archive production artifacts
         uses: actions/upload-artifact@v4
         with:
