@@ -80,7 +80,14 @@ jobs:
 
       - name: "[WEB SSR] Compress Artifacts"
         run: |
-          tar -czf public.tar.gz ${{ github.workspace }}/public ${{ github.workspace }}/.next/standalone ${{ github.workspace }}/.next/static
+          tar -czf public.tar.gz \
+            ${{ github.workspace }}/public \
+            ${{ github.workspace }}/.next/standalone \
+            ${{ github.workspace }}/.next/static \
+            ${{ github.workspace }}/.config \
+            ${{ github.workspace }}/scripts \
+            ${{ github.workspace }}/elastic-apm-node.js
+
 
       - name: Archive production artifacts
         uses: actions/upload-artifact@v4
@@ -133,7 +140,7 @@ jobs:
       contents: read
       actions: write
       deployments: write
-    uses: freeletics/actions/.github/workflows/gha-deploy-integration.yaml@main
+    uses: freeletics/actions/.github/workflows/gha-deploy-integration.yaml@web-ssr-workflow
     with:
       ARTIFACTS_NAME: "public"
       ARTIFACTS_COMPRESSED: true
