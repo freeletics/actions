@@ -99,6 +99,13 @@ jobs:
       - name: Set Spec result
         id: test_job_result
         run: echo "test_job_result=${{job.status}}" >> $GITHUB_OUTPUT
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: marshaled
+          path: marshaled.txt
+          retention-days: 1
   Linters:
     timeout-minutes: ${{ inputs.rails_linter_timeout_minutes }}
     runs-on: ubuntu-22.04
