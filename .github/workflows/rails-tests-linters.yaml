@@ -104,7 +104,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: marshaled
-          path: marshaled.txt
+          path: coverage/marshaled.txt
           retention-days: 1
   Linters:
     timeout-minutes: ${{ inputs.rails_linter_timeout_minutes }}
