@@ -103,8 +103,8 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: marshaled
-          path: coverage/marshaled.txt
+          name: test-debug-files
+          path: tmp/*.txt
           retention-days: 1
   Linters:
     timeout-minutes: ${{ inputs.rails_linter_timeout_minutes }}
