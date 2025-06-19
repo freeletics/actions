@@ -96,16 +96,18 @@ jobs:
           else
             bundle exec rspec
           fi
-      - name: Set Spec result
-        id: test_job_result
-        run: echo "test_job_result=${{job.status}}" >> $GITHUB_OUTPUT
-
+      - name: Show contents of tmp
+        run: ls -l tmp || echo "No files in tmp"
       - name: Upload artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-debug-files
           path: tmp/*.txt
           retention-days: 1
+      - name: Set Spec result
+        id: test_job_result
+        run: echo "test_job_result=${{job.status}}" >> $GITHUB_OUTPUT
   Linters:
     timeout-minutes: ${{ inputs.rails_linter_timeout_minutes }}
     runs-on: ubuntu-22.04
