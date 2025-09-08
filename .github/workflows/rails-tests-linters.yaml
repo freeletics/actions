@@ -70,7 +70,7 @@ jobs:
           concurrent_skipping: "same_content"
           cancel_others: "true"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         name: Checkout the code
       - uses: ruby/setup-ruby@v1
         name: Prepare ruby environment
@@ -108,7 +108,7 @@ jobs:
       GITHUB_OUTPUT: ${{ github.workspace }}/.github_output
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 50
       - name: Install Ruby and gems
