@@ -38,7 +38,7 @@ jobs:
 
       - name: Create tag
         if: github.event.inputs.deploy == 'true'
-        uses: actions/github-script@v7.0.1
+        uses: actions/github-script@v7.1.0
         with:
           github-token: ${{ secrets.JENKINS_PAT_FLUXCD }}
           script: |
