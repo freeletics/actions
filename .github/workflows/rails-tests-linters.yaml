@@ -48,7 +48,7 @@ jobs:
       TEST_CORE_ADMIN_DATABASE_URL: "postgres:///${{inputs.core_admin_test_database_name}}"
     services:
       postgres:
-        image: postgres:16
+        image: postgres:18
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
