@@ -40,7 +40,7 @@ env:
 jobs:
   Tests:
     # You must use a Linux environment when using service containers or container jobs
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     timeout-minutes: ${{ inputs.rails_test_timeout_minutes }}
     env:
       RAILS_ENV: test
@@ -102,7 +102,7 @@ jobs:
         run: echo "test_job_result=${{job.status}}" >> $GITHUB_OUTPUT
   Linters:
     timeout-minutes: ${{ inputs.rails_linter_timeout_minutes }}
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     outputs:
       linters_job_result: ${{ steps.linters_job_result.outputs.linters_job_result }}
     env:
