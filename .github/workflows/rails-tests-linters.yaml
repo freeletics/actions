@@ -77,6 +77,9 @@ jobs:
         with:
           ruby-version: "3.4.5"
           bundler-cache: true
+
+      - name: Print Ruby version
+        run: ruby -v
       - name: Set up database
         run: |
           pg_config --version
