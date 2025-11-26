@@ -28,7 +28,7 @@ jobs:
 
       - name: Check out code
         if: github.event.inputs.deploy == 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Get current date
         if: github.event.inputs.deploy == 'true'
@@ -68,7 +68,7 @@ jobs:
       # adding this here so if the repo do not have the release workflow it will update here
       ##### Git versions ####
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         if: github.event.inputs.deploy == 'true'
         with:
           fetch-depth: 0
