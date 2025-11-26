@@ -1,0 +1,10 @@
+name: Global Timeout
+on:
+  workflow_call:
+
+jobs:
+  enforce:
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Running with global timeout"
