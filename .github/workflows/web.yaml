@@ -86,7 +86,7 @@ jobs:
         uses: lycheeverse/lychee-action@v2
         with:
           args: "./dist"
-          fail: false
+          failIfEmpty: false
 
       - name: "[WEB] Compress Artifacts"
         if: github.event.repository.name == 'web-service-main'
