@@ -8,6 +8,7 @@ permissions:
 
 jobs:
   compare_commits:
+    timeout-minutes: ${{ fromJSON(vars.BE_JOB_TIMEOUT || vars.DEFAULT_JOB_TIMEOUT) }}
     runs-on: ubuntu-22.04
 
     steps:

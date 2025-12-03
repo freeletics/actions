@@ -7,6 +7,7 @@ on:
 
 jobs:
   maxmind_geoip_update:
+    timeout-minutes: ${{ fromJSON(vars.BE_JOB_TIMEOUT || vars.DEFAULT_JOB_TIMEOUT) }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code

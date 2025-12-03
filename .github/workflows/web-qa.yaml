@@ -38,6 +38,7 @@ jobs:
   build:
     name: Build Docker image
     runs-on: ubuntu-latest
+    timeout-minutes: ${{ fromJSON(vars.WEB_JOB_TIMEOUT || vars.DEFAULT_JOB_TIMEOUT) }}
     steps:
       - name: Skip Duplicate Actions
         uses: fkirc/skip-duplicate-actions@v5.3.1

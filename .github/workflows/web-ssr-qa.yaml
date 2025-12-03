@@ -37,6 +37,7 @@ permissions:
 jobs:
   build:
     name: Build Docker image
+    timeout-minutes: ${{ fromJSON(vars.WEB_JOB_TIMEOUT || vars.DEFAULT_JOB_TIMEOUT) }}
     runs-on: ubuntu-latest
     steps:
       - name: Skip Duplicate Actions
