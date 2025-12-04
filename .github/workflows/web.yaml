@@ -29,6 +29,7 @@ permissions:
 
 jobs:
   build:
+    timeout-minutes: ${{ fromJSON(vars.WEB_JOB_TIMEOUT || vars.DEFAULT_JOB_TIMEOUT) }}
     env:
       APP_ENV: "${{ contains(github.ref, 'refs/tags/') && 'production' || inputs.APP_ENV }}"
     outputs:

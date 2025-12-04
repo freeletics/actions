@@ -34,6 +34,7 @@ jobs:
     outputs:
       IMAGE_TAG: ${{ steps.IMAGE_TAG.outputs.IMAGE_TAG }}
     name: Build app
+    timeout-minutes: ${{ fromJSON(vars.WEB_JOB_TIMEOUT || vars.DEFAULT_JOB_TIMEOUT) }}
     runs-on: ubuntu-latest
     steps:
       ################################# PRE STEPS ###############################################

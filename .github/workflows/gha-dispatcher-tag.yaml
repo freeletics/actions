@@ -28,6 +28,7 @@ permissions:
 
 jobs:
   build:
+    timeout-minutes: ${{ fromJSON(vars.BE_JOB_TIMEOUT || vars.DEFAULT_JOB_TIMEOUT) }}
     name: Build Docker image
     runs-on: ubuntu-latest
     steps:
