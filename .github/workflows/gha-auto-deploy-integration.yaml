@@ -85,15 +85,24 @@ jobs:
             type=sha,enable=true,priority=600,prefix=gha-,suffix=
             type=raw,enable=true,priority=600,prefix=gha-deploy-int-,value=${{ steps.timestamp.outputs.date }}
 
-      - uses: int128/kaniko-action@v1.50.0
-        name: Build with Kaniko
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Create and use a new builder instance
+        run: |
+          docker buildx create --name builder --use
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
         with:
-          push: true
+          context: .
           file: "${{ inputs.DOCKERFILE }}"
+          push: true
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}
-          cache: ${{ inputs.KANIKO_CACHE }}
-          cache-repository: ${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/kaniko-cache
+          builder: builder
+          cache-from: type=registry,ref=${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/kaniko-cache
+          cache-to: type=registry,mode=max,image-manifest=true,oci-mediatypes=true,ref=${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/kaniko-cache
 
       - uses: chrnorm/deployment-action@v2
         name: Create GitHub deployment
