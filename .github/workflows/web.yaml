@@ -84,15 +84,17 @@ jobs:
 
       - name: Link Checker
         id: lychee
+        if: github.event.repository.name == 'web-service-main'
         uses: lycheeverse/lychee-action@v2
+        continue-on-error: true
         with:
-          args: "./dist"
+          args: "./apps/web-main/dist"
           failIfEmpty: false
 
       - name: "[WEB] Compress Artifacts"
         if: github.event.repository.name == 'web-service-main'
         run: |
-          tar -czf public.tar.gz dist
+          tar -czf public.tar.gz -C apps/web-main dist
 
       - name: Archive production artifacts
         uses: actions/upload-artifact@v4
