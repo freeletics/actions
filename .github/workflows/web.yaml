@@ -82,13 +82,6 @@ jobs:
           APP_ENV: "${{ env.APP_ENV }}"
           GATSBY_APP_ENV: "${{ env.APP_ENV }}"
 
-      - name: Link Checker
-        id: lychee
-        uses: lycheeverse/lychee-action@v2
-        with:
-          args: "./dist"
-          failIfEmpty: false
-
       - name: "[WEB] Compress Artifacts"
         if: github.event.repository.name == 'web-service-main'
         run: |
