@@ -78,7 +78,7 @@ jobs:
 
         # for tag we use gha-prod
         # for intgration get a new image tag with date of today; then a webhook will notify Flux of changes
-      - uses: docker/metadata-action@v5.7.0
+      - uses: docker/metadata-action@v5.10.0
         name: Generate tags
         id: metadata
         with:

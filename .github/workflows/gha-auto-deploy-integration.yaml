@@ -76,7 +76,7 @@ jobs:
         run: echo "date=$(date +'%s')" >> $GITHUB_OUTPUT
 
         # for tag we use gha-prod
-      - uses: docker/metadata-action@v5.7.0
+      - uses: docker/metadata-action@v5.10.0
         name: Generate tags
         id: metadata
         with:
