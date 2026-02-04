@@ -28,7 +28,7 @@ jobs:
           token: ${{ secrets.JENKINS_PAT_FLUXCD }}
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4.2.0
+        uses: aws-actions/configure-aws-credentials@v6.0.0
         with:
           role-to-assume: arn:aws:iam::${{ inputs.AWS_ACCOUNT_ID }}:role/github-actions/fl-prod-${{ github.event.repository.name }}
           aws-region: eu-west-1
