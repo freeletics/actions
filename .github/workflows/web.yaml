@@ -85,7 +85,7 @@ jobs:
       - name: "[WEB] Compress Artifacts"
         if: github.event.repository.name == 'web-service-main'
         run: |
-          tar -czf public.tar.gz dist
+          tar -czf public.tar.gz apps/web-main/dist
 
       - name: Archive production artifacts
         uses: actions/upload-artifact@v4
