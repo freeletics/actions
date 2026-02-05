@@ -67,7 +67,7 @@ jobs:
         run: tar -xzf ${{ github.workspace }}/${{ inputs.ARTIFACTS_NAME }}/${{ inputs.ARTIFACTS_NAME }}.tar.gz -C ${{ github.workspace }}
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4.2.0
+        uses: aws-actions/configure-aws-credentials@v6.0.0
         with:
           role-to-assume: arn:aws:iam::${{ inputs.AWS_ACCOUNT_ID }}:role/github-actions/fl-${{ inputs.AWS_ECR_ENV_NAME }}-${{ github.event.repository.name }}
           aws-region: ${{ inputs.AWS_REGION }}
