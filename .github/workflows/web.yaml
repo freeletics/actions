@@ -75,7 +75,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build
-        run: pnpm build --mode $APP_ENV
+        run: pnpm build -- --mode $APP_ENV
         env:
           NODE_ENV: "production"
           CI: false
