@@ -21,6 +21,10 @@ on:
         description: "Node.js version to use"
         type: string
         default: "22.13.1"
+      MODE:
+        required: false
+        type: string
+        default: "server"
 
 permissions:
   id-token: write
@@ -80,6 +84,12 @@ jobs:
           CI: false
 
       - name: "[WEB SSR] Compress Artifacts"
+        if: inputs.MODE == 'server'
+        run: |
+          tar -czf public.tar.gz ${{ github.workspace }}/public ${{ github.workspace }}/.next/standalone ${{ github.workspace }}/.next/static ${{ github.workspace }}/server ${{ github.workspace }}/config
+
+      - name: "[WEB SSR] Compress Artifacts"
+        if: inputs.MODE != 'server'
         run: |
           tar -czf public.tar.gz ${{ github.workspace }}/public ${{ github.workspace }}/.next/standalone ${{ github.workspace }}/.next/static
 
