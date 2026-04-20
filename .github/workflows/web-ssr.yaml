@@ -82,6 +82,7 @@ jobs:
         env:
           NODE_ENV: "production"
           CI: false
+          APP_ENV: "${{ env.APP_ENV }}"
 
       - name: "[WEB SSR] Compress Artifacts"
         if: inputs.MODE == 'server'
@@ -115,7 +116,6 @@ jobs:
       DOCKERFILE: "Dockerfile.gha"
       AWS_REGION: "eu-west-1"
       AWS_ACCOUNT_ID: "524690225562"
-      APP_ENV: "production"
     secrets: inherit
 
   integration:
@@ -134,7 +134,6 @@ jobs:
       DOCKERFILE: "Dockerfile.gha"
       AWS_REGION: "eu-west-1"
       AWS_ACCOUNT_ID: "524690225562"
-      APP_ENV: "integration"
     secrets: inherit
 
   integration_manual:
@@ -153,7 +152,6 @@ jobs:
       DOCKERFILE: "Dockerfile.gha"
       AWS_REGION: "eu-west-1"
       AWS_ACCOUNT_ID: "524690225562"
-      APP_ENV: "integration"
     secrets: inherit
 
   qa:
@@ -171,6 +169,5 @@ jobs:
       DOCKERFILE: "Dockerfile.gha"
       AWS_REGION: "eu-west-1"
       AWS_ACCOUNT_ID: "524690225562"
-      APP_ENV: "qa"
     secrets: inherit
 ##########################################################################################
