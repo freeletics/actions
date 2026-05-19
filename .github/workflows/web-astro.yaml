@@ -1,0 +1,240 @@
+name: "Astro Build with Docker Kaniko"
+
+# Reusable build workflow for static Astro (Bun) sites such as
+# freeletics-web-astro. Counterpart to `web-blog.yaml` (Gatsby/yarn) and
+# `web.yaml` (Vite/pnpm). Produces the same artifact contract as those
+# workflows (a `public.tar.gz` archive uploaded under the artifact name
+# `public`) so the downstream docker/integration/QA workflows can be
+# reused without modification.
+#
+# Consumer responsibilities
+# -------------------------
+# The consuming repo's `package.json` must expose:
+#  - A `build` script that runs `astro build` (or equivalent) and
+#    emits its output under `BUILD_OUTPUT_DIR` (default `dist`).
+#  - A `cms:dump` script (configurable via `CMS_DUMP_SCRIPT`) that
+#    snapshots the CMS into `CMS_DATA_DIR` (default `data/cms`) in
+#    delta mode — i.e. reads its own incremental sync state and only
+#    fetches records updated since the last successful run.
+#
+# Both scripts receive `APP_ENV` and `NODE_ENV` in the environment;
+# how they read secrets (committed `.env.<env>` files, GitHub secrets
+# injected by the consumer's wrapper, etc.) is out of scope here.
+#
+# Build flow
+# ----------
+#  1. `bun install --frozen-lockfile`
+#  2. Restore the previous CMS snapshot from cache (keyed per repo + env).
+#  3. Run the CMS dump script — fetches only changed records since the
+#     restored snapshot's last `updated_at`.
+#  4. Run the build script.
+#  5. tar + upload the build output as the artifact `public`.
+#
+# A `.tool-versions` file at the repo root pinning `bun <version>` is
+# the recommended way to lock the runtime — pass that version via the
+# `BUN_VERSION` input from the consumer's wrapper workflow.
+#
+# Apps without a CMS can pass `CMS_DATA_DIR: ""` to disable steps 2 + 3.
+
+on:
+  workflow_call:
+    inputs:
+      APP_ENV:
+        required: false
+        type: string
+        default: "staging"
+      DOCKERFILE:
+        required: false
+        type: string
+        default: "Dockerfile"
+      deployment_type:
+        required: false
+        description: "Used to identify if a deployment was triggered manually or on PR merge"
+        type: string
+        default: "no-deployment"
+      NODE_VERSION:
+        required: false
+        description: "Node.js version. Astro 6 requires >= 22.12.0. Node is needed alongside Bun because `astro` spawns Node internally."
+        type: string
+        default: "22.13.1"
+      BUN_VERSION:
+        required: false
+        description: "Bun version (matches `.tool-versions` in the consumer repo). Use `latest` only when reproducibility is not required."
+        type: string
+        default: "latest"
+      BUILD_OUTPUT_DIR:
+        required: false
+        description: "Path of the directory `astro build` emits. Defaults to `dist`."
+        type: string
+        default: "dist"
+      CMS_DATA_DIR:
+        required: false
+        description: "Path of the directory holding the CMS snapshot to cache across runs. The consumer's `cms:dump` script must read/write its incremental sync state here. Set to an empty string to disable the CMS data step (e.g. for Astro apps without a CMS)."
+        type: string
+        default: "data/cms"
+      CMS_DUMP_SCRIPT:
+        required: false
+        description: "Name of the npm script that fetches CMS data (delta mode). Skipped when CMS_DATA_DIR is empty."
+        type: string
+        default: "cms:dump"
+
+permissions:
+  id-token: write
+  contents: read
+  actions: write
+
+jobs:
+  build:
+    timeout-minutes: ${{ fromJSON(vars.WEB_JOB_TIMEOUT || vars.DEFAULT_JOB_TIMEOUT) }}
+    env:
+      APP_ENV: "${{ contains(github.ref, 'refs/tags/') && 'production' || inputs.APP_ENV }}"
+    outputs:
+      IMAGE_TAG: ${{ steps.IMAGE_TAG.outputs.IMAGE_TAG }}
+    name: Build app
+    runs-on: ubuntu-latest
+    steps:
+      ################################# PRE STEPS ###############################################
+      - name: Skip Duplicate Actions
+        uses: fkirc/skip-duplicate-actions@v5.3.1
+        with:
+          concurrent_skipping: "same_content"
+          cancel_others: "true"
+
+      - name: Check out code
+        uses: actions/checkout@v6
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "${{ inputs.BUN_VERSION }}"
+
+      # Astro spawns Node under the hood (Astro 6 enforces >= 22.12.0)
+      # so we install Node alongside Bun rather than relying on the
+      # runner's default (currently Node 20.x).
+      - name: Use Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "${{ inputs.NODE_VERSION }}"
+
+      - name: Login to NPM
+        run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" >> .npmrc
+
+      ##########################################################################################
+      ####################################### BUILD STEP #######################################
+      - name: Install deps
+        run: bun install --frozen-lockfile
+
+      # Restore the previous CMS snapshot so the dump script can do a
+      # delta fetch (Contentstack `query={"updated_at":{"$gt": …}}`) instead
+      # of a full re-pull. The key is unique per run so we always save a
+      # new entry; the restore-key prefix pulls the most recent snapshot
+      # for this env. Cache size is unbounded per run but GitHub evicts
+      # the oldest entries once total repo cache exceeds 10 GB.
+      #
+      # Caveat: delta mode does not detect deletions. Schedule a periodic
+      # `--full` re-pull in the consumer repo (e.g. a weekly cron
+      # workflow) to reconcile.
+      - name: Restore CMS data cache
+        if: inputs.CMS_DATA_DIR != ''
+        id: cms-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ inputs.CMS_DATA_DIR }}
+          key: ${{ runner.os }}-cms-${{ github.event.repository.name }}-${{ env.APP_ENV }}-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-cms-${{ github.event.repository.name }}-${{ env.APP_ENV }}-
+
+      - name: Pull CMS delta
+        if: inputs.CMS_DATA_DIR != ''
+        run: bun run ${{ inputs.CMS_DUMP_SCRIPT }}
+        env:
+          APP_ENV: "${{ env.APP_ENV }}"
+
+      - name: Build
+        run: bun run build
+        env:
+          NODE_ENV: "production"
+          CI: "false"
+          APP_ENV: "${{ env.APP_ENV }}"
+
+      - name: Compress Artifacts
+        run: tar -czf public.tar.gz "${{ inputs.BUILD_OUTPUT_DIR }}"
+
+      - name: Archive production artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: public
+          path: |
+            public.tar.gz
+          retention-days: 5
+
+  docker:
+    needs: build
+    name: Docker step
+    if: contains(github.ref, 'refs/tags/') || contains(github.ref, 'refs/pull/')
+    permissions:
+      id-token: write
+      contents: read
+      actions: write
+    uses: freeletics/actions/.github/workflows/docker.yaml@main #this has to be public
+    with:
+      ARTIFACTS_NAME: "public"
+      ARTIFACTS_COMPRESSED: true
+      DOCKERFILE: "${{ inputs.DOCKERFILE }}"
+      AWS_REGION: "eu-west-1"
+      AWS_ACCOUNT_ID: "524690225562"
+    secrets: inherit
+
+  integration:
+    if: contains(github.ref, 'refs/heads/') && inputs.APP_ENV != 'qa' && inputs.deployment_type == 'auto'
+    needs: build
+    name: Deploy to integration
+    permissions:
+      id-token: write
+      contents: read
+      actions: write
+      deployments: write
+    uses: freeletics/actions/.github/workflows/gha-auto-deploy-integration.yaml@main
+    with:
+      ARTIFACTS_NAME: "public"
+      ARTIFACTS_COMPRESSED: true
+      DOCKERFILE: "${{ inputs.DOCKERFILE }}"
+      AWS_REGION: "eu-west-1"
+      AWS_ACCOUNT_ID: "524690225562"
+    secrets: inherit
+
+  integration_manual:
+    if: contains(github.ref, 'refs/heads/') && inputs.APP_ENV != 'qa' && inputs.deployment_type == 'manual'
+    needs: build
+    name: Deploy to integration
+    permissions:
+      id-token: write
+      contents: read
+      actions: write
+      deployments: write
+    uses: freeletics/actions/.github/workflows/gha-deploy-integration.yaml@main
+    with:
+      ARTIFACTS_NAME: "public"
+      ARTIFACTS_COMPRESSED: true
+      DOCKERFILE: "${{ inputs.DOCKERFILE }}"
+      AWS_REGION: "eu-west-1"
+      AWS_ACCOUNT_ID: "524690225562"
+    secrets: inherit
+
+  qa:
+    if: contains(github.ref, 'refs/heads/') && inputs.APP_ENV == 'qa'
+    needs: build
+    name: Deploy to QA
+    permissions:
+      id-token: write
+      contents: read
+      actions: write
+    uses: freeletics/actions/.github/workflows/web-qa.yaml@main
+    with:
+      ARTIFACTS_NAME: "public"
+      ARTIFACTS_COMPRESSED: true
+      DOCKERFILE: "${{ inputs.DOCKERFILE }}"
+      AWS_REGION: "eu-west-1"
+      AWS_ACCOUNT_ID: "524690225562"
+    secrets: inherit
+##########################################################################################
