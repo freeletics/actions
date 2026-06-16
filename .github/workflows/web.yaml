@@ -21,11 +21,6 @@ on:
         description: "Node.js version to use"
         type: string
         default: "22.13.1"
-      EBANX_INTEGRATION_KEY:
-        required: false
-        description: "EBANX API KEY"
-        type: string
-        default: ""   
 
 permissions:
   id-token: write
@@ -82,7 +77,7 @@ jobs:
       - name: Download & convert EBANX BIN data
         if: github.event.repository.name == 'web-service-main'
         env:
-          INTEGRATION_KEY: ${{ inputs.EBANX_INTEGRATION_KEY }}
+          INTEGRATION_KEY: ${{ secrets.EBANX_INTEGRATION_KEY }}
         run: |
           cd apps/web-main/config/ebanx
           for c in AR CL CO MX PE; do
@@ -101,7 +96,7 @@ jobs:
           GATSBY_APP_ENV: "${{ env.APP_ENV }}"
 
       - name: Bundle EBANX data into build output
-        if: github.event.repository.name == 'web-service-main'
+        if: github.event.repository.name == 'web-service-main' && inputs.APP_ENV == 'qa'
         run: |
           mkdir -p apps/web-main/dist/ebanx
           cp -R apps/web-main/config/ebanx/converted/. apps/web-main/dist/ebanx/
