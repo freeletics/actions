@@ -113,7 +113,7 @@ jobs:
         if: steps.ebanx_key.outputs.present == 'true'
         run: |
           mkdir -p apps/web-main/dist/ebanx
-          cp -R apps/web-main/config/ebanx/converted/. apps/web-main/dist/ebanx/
+          cp -R apps/web-main/config/ebanx/converted/. apps/web-main/dist/client/ebanx/
 
       - name: "[WEB] Compress Artifacts"
         if: github.event.repository.name == 'web-service-main'
