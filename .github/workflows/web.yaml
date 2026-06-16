@@ -21,6 +21,11 @@ on:
         description: "Node.js version to use"
         type: string
         default: "22.13.1"
+      EBANX_INTEGRATION_KEY:
+        required: false
+        description: "EBANX API KEY"
+        type: string
+        default: ""   
 
 permissions:
   id-token: write
@@ -74,6 +79,19 @@ jobs:
       - name: "Install deps"
         run: pnpm install --frozen-lockfile
 
+      - name: Download & convert EBANX BIN data
+        if: github.event.repository.name == 'web-service-main'
+        env:
+          INTEGRATION_KEY: ${{ inputs.EBANX_INTEGRATION_KEY }}
+        run: |
+          cd apps/web-main/config/ebanx
+          for c in AR CL CO MX PE; do
+            curl -fsS -o "cardbin-$c.json" \
+              "https://api.ebanx.com/ws/cardbin/?integration_key=$INTEGRATION_KEY&country=$c"
+          done
+          cd ../../../..
+          pnpm convertebanx
+
       - name: Build
         run: pnpm build -- --mode $APP_ENV
         env:
@@ -81,6 +99,12 @@ jobs:
           CI: false
           APP_ENV: "${{ env.APP_ENV }}"
           GATSBY_APP_ENV: "${{ env.APP_ENV }}"
+
+      - name: Bundle EBANX data into build output
+        if: github.event.repository.name == 'web-service-main'
+        run: |
+          mkdir -p apps/web-main/dist/ebanx
+          cp -R apps/web-main/config/ebanx/converted/. apps/web-main/dist/ebanx/
 
       - name: "[WEB] Compress Artifacts"
         if: github.event.repository.name == 'web-service-main'
