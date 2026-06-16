@@ -37,6 +37,7 @@ jobs:
     name: Build app
     runs-on: ubuntu-latest
     steps:
+      ################################# PRE STEPS ###############################################
       - name: Skip Duplicate Actions
         uses: fkirc/skip-duplicate-actions@v5.3.1
         with:
@@ -68,7 +69,8 @@ jobs:
           key: ${{ runner.os }}-${{ env.APP_ENV }}-build-${{ github.event.repository.name }}-${{ github.run_id }}
           restore-keys: |
             ${{ runner.os }}-${{ env.APP_ENV }}-build-${{ github.event.repository.name }}-
-
+      ##########################################################################################
+      ####################################### BUILD STEP #######################################
       - name: "Install deps"
         run: pnpm install --frozen-lockfile
 
@@ -91,10 +93,11 @@ jobs:
           INTEGRATION_KEY: ${{ secrets.EBANX_INTEGRATION_KEY }}
         run: |
           cd apps/web-main/config/ebanx
-          for c in AR CL CO MX PE; do
-            curl -fsS -o "cardbin-$c.json" \
-              "https://api.ebanx.com/ws/cardbin/?integration_key=$INTEGRATION_KEY&country=$c"
-          done
+          curl -fsS "https://api.ebanx.com/ws/cardbin/?integration_key=$INTEGRATION_KEY&country=AR" -o ar.json
+          curl -fsS "https://api.ebanx.com/ws/cardbin/?integration_key=$INTEGRATION_KEY&country=CL" -o cl.json
+          curl -fsS "https://api.ebanx.com/ws/cardbin/?integration_key=$INTEGRATION_KEY&country=CO" -o co.json
+          curl -fsS "https://api.ebanx.com/ws/cardbin/?integration_key=$INTEGRATION_KEY&country=MX" -o mx.json
+          curl -fsS "https://api.ebanx.com/ws/cardbin/?integration_key=$INTEGRATION_KEY&country=PE" -o pe.json
           cd ../../../..
           pnpm convertebanx
 
@@ -124,3 +127,72 @@ jobs:
           path: |
             public.tar.gz
           retention-days: 5
+
+  docker:
+    needs: build
+    name: Docker step
+    if: contains(github.ref, 'refs/tags/') || contains(github.ref, 'refs/pull/')
+    permissions:
+      id-token: write
+      contents: read
+      actions: write
+    uses: freeletics/actions/.github/workflows/docker.yaml@main #this has to be public
+    with:
+      ARTIFACTS_NAME: "public"
+      ARTIFACTS_COMPRESSED: true
+      DOCKERFILE: "Dockerfile.gha"
+      AWS_REGION: "eu-west-1"
+      AWS_ACCOUNT_ID: "524690225562"
+    secrets: inherit
+  integration:
+    if: contains(github.ref, 'refs/heads/') && inputs.APP_ENV != 'qa' && inputs.deployment_type == 'auto'
+    needs: build
+    name: Deploy to integration
+    permissions:
+      id-token: write
+      contents: read
+      actions: write
+      deployments: write
+    uses: freeletics/actions/.github/workflows/gha-auto-deploy-integration.yaml@main
+    with:
+      ARTIFACTS_NAME: "public"
+      ARTIFACTS_COMPRESSED: true
+      DOCKERFILE: "Dockerfile.gha"
+      AWS_REGION: "eu-west-1"
+      AWS_ACCOUNT_ID: "524690225562"
+    secrets: inherit
+  integration_manual:
+    if: contains(github.ref, 'refs/heads/') && inputs.APP_ENV != 'qa' && inputs.deployment_type == 'manual'
+    needs: build
+    name: Deploy to integration
+    permissions:
+      id-token: write
+      contents: read
+      actions: write
+      deployments: write
+    uses: freeletics/actions/.github/workflows/gha-deploy-integration.yaml@main
+    with:
+      ARTIFACTS_NAME: "public"
+      ARTIFACTS_COMPRESSED: true
+      DOCKERFILE: "Dockerfile.gha"
+      AWS_REGION: "eu-west-1"
+      AWS_ACCOUNT_ID: "524690225562"
+    secrets: inherit
+
+  qa:
+    if: contains(github.ref, 'refs/heads/') && inputs.APP_ENV == 'qa'
+    needs: build
+    name: Deploy to QA
+    permissions:
+      id-token: write
+      contents: read
+      actions: write
+    uses: freeletics/actions/.github/workflows/web-qa.yaml@main
+    with:
+      ARTIFACTS_NAME: "public"
+      ARTIFACTS_COMPRESSED: true
+      DOCKERFILE: "Dockerfile.gha"
+      AWS_REGION: "eu-west-1"
+      AWS_ACCOUNT_ID: "524690225562"
+    secrets: inherit
+##########################################################################################
