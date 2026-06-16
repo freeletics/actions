@@ -74,6 +74,33 @@ jobs:
       - name: "Install deps"
         run: pnpm install --frozen-lockfile
 
+      - name: Check EBANX key
+        id: ebanx_key
+        if: github.event.repository.name == 'web-service-main'
+        env:
+          INTEGRATION_KEY: ${{ secrets.EBANX_INTEGRATION_KEY }}
+        run: |
+          if [ -n "$INTEGRATION_KEY" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::EBANX_INTEGRATION_KEY is empty or not set — skipping EBANX fetch and bundle"
+          fi
+
+      - name: Download & convert EBANX BIN data
+        if: steps.ebanx_key.outputs.present == 'true'
+        env:
+          INTEGRATION_KEY: ${{ secrets.EBANX_INTEGRATION_KEY }}
+        run: |
+          cd apps/web-main/config/ebanx
+          curl -fsS "https://api.ebanx.com/ws/cardbin/?integration_key=$INTEGRATION_KEY&country=AR" -o ar.json
+          curl -fsS "https://api.ebanx.com/ws/cardbin/?integration_key=$INTEGRATION_KEY&country=CL" -o cl.json
+          curl -fsS "https://api.ebanx.com/ws/cardbin/?integration_key=$INTEGRATION_KEY&country=CO" -o co.json
+          curl -fsS "https://api.ebanx.com/ws/cardbin/?integration_key=$INTEGRATION_KEY&country=MX" -o mx.json
+          curl -fsS "https://api.ebanx.com/ws/cardbin/?integration_key=$INTEGRATION_KEY&country=PE" -o pe.json
+          cd ../../../..
+          pnpm convertebanx
+
       - name: Build
         run: pnpm build -- --mode $APP_ENV
         env:
@@ -81,6 +108,12 @@ jobs:
           CI: false
           APP_ENV: "${{ env.APP_ENV }}"
           GATSBY_APP_ENV: "${{ env.APP_ENV }}"
+
+      - name: Bundle EBANX data into build output
+        if: steps.ebanx_key.outputs.present == 'true'
+        run: |
+          mkdir -p apps/web-main/dist/ebanx
+          cp -R apps/web-main/config/ebanx/converted/. apps/web-main/dist/client/ebanx/
 
       - name: "[WEB] Compress Artifacts"
         if: github.event.repository.name == 'web-service-main'
