@@ -68,7 +68,7 @@ jobs:
           inputs.ARTIFACTS_NAME }}.tar.gz -C ${{ github.workspace }}
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4.2.0
+        uses: aws-actions/configure-aws-credentials@v4.3.1
         with:
           role-to-assume: arn:aws:iam::${{ inputs.AWS_ACCOUNT_ID
             }}:role/github-actions/fl-${{ inputs.AWS_ECR_ENV_NAME }}-${{
