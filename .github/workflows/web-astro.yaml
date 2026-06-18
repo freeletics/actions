@@ -137,7 +137,7 @@ jobs:
       - name: Restore CMS data cache
         if: inputs.CMS_DATA_DIR != ''
         id: cms-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ inputs.CMS_DATA_DIR }}
           key: ${{ runner.os }}-cms-${{ github.event.repository.name }}-${{ env.APP_ENV }}-${{ github.run_id }}
