@@ -42,6 +42,7 @@ jobs:
       if: ${{ steps.check_diff.outputs.send_deployment_reminder == 'true' }}
       uses: slackapi/slack-github-action@v2
       with:
+        errors: true
         webhook: ${{secrets.DEPLOYMENT_REMINDER_SLACK_WEBHOOK}}
         webhook-type: incoming-webhook
         payload: |
