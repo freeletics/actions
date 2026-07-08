@@ -6,7 +6,6 @@ on:
       deploy:
         required: true
         type: string
-        default: 'true'
 
 permissions:
   id-token: write
