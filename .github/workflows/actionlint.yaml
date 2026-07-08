@@ -13,7 +13,7 @@ jobs:
   actionlint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       # Static check of every workflow/action YAML: syntax, expression errors,
       # unknown inputs (catches Renovate major bumps that rename/remove a `with:` key),
       # and shellcheck over `run:` blocks. Does not execute the reusable workflows.

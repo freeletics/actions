@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: MaxMind GeoIP Update
         uses: docker://ghcr.io/maxmind/geoipupdate:v7.1.1
