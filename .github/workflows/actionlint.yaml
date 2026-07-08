@@ -17,7 +17,7 @@ jobs:
       # Static check of every workflow/action YAML: syntax, expression errors,
       # unknown inputs (catches Renovate major bumps that rename/remove a `with:` key),
       # and shellcheck over `run:` blocks. Does not execute the reusable workflows.
-      - uses: docker://rhysd/actionlint:1.7.7
+      - uses: docker://rhysd/actionlint:1.7.12
         with:
           # shellcheck disabled: the only findings are info-level $GITHUB_OUTPUT
           # quoting noise, unrelated to catching dependency-bump breakage.
