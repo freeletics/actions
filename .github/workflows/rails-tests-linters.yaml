@@ -29,6 +29,10 @@ on:
         required: false
         type: number
         default: 2
+      postgres_image:
+        required: false
+        type: string
+        default: "postgres:16"
 
 env:
   BUNDLE_GITHUB__COM: "${{ secrets.PRIVATE_GEMS_SECRET }}:x-oauth-basic"
@@ -48,7 +52,7 @@ jobs:
       TEST_CORE_ADMIN_DATABASE_URL: "postgres:///${{inputs.core_admin_test_database_name}}"
     services:
       postgres:
-        image: postgres:16
+        image: ${{ inputs.postgres_image }}
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -62,8 +66,8 @@ jobs:
     outputs:
       test_job_result: ${{ steps.test_job_result.outputs.test_job_result }}
     steps:
-      - name: Install ImageMagick
-        run: sudo apt install imagemagick
+      - name: Verify ImageMagick is available
+        run: command -v convert >/dev/null || command -v magick >/dev/null || { echo "ImageMagick not found on the runner image"; exit 1; }
       - name: Skip Duplicate Actions
         uses: fkirc/skip-duplicate-actions@v5.3.1
         with:
