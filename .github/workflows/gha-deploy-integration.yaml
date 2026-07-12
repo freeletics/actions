@@ -91,7 +91,7 @@ jobs:
             type=raw,enable=true,priority=600,prefix=gha-deploy-int-,value=${{ steps.timestamp.outputs.date }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Create and use a new builder instance
         run: |
