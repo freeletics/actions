@@ -40,7 +40,7 @@ jobs:
 
     - name: Notify Slack
       if: ${{ steps.check_diff.outputs.send_deployment_reminder == 'true' }}
-      uses: slackapi/slack-github-action@v3
+      uses: slackapi/slack-github-action@v4
       with:
         errors: true
         webhook: ${{secrets.DEPLOYMENT_REMINDER_SLACK_WEBHOOK}}
