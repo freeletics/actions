@@ -41,7 +41,7 @@ jobs:
     timeout-minutes: ${{ fromJSON(vars.WEB_JOB_TIMEOUT || vars.DEFAULT_JOB_TIMEOUT) }}
     steps:
       - name: Skip Duplicate Actions
-        uses: fkirc/skip-duplicate-actions@v5.3.1
+        uses: fkirc/skip-duplicate-actions@v5.3.2
         with:
           concurrent_skipping: "same_content"
           cancel_others: "true"
