@@ -69,7 +69,7 @@ jobs:
       - name: Verify ImageMagick is available
         run: command -v convert >/dev/null || command -v magick >/dev/null || { echo "ImageMagick not found on the runner image"; exit 1; }
       - name: Skip Duplicate Actions
-        uses: fkirc/skip-duplicate-actions@v5.3.1
+        uses: fkirc/skip-duplicate-actions@v5.3.2
         with:
           concurrent_skipping: "same_content"
           cancel_others: "true"
