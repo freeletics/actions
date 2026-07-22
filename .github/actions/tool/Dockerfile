@@ -1,4 +1,4 @@
-FROM alpine:3.21.0
+FROM alpine:3.24.1
 
 RUN apk update && \
     apk --no-cache add curl jq coreutils
