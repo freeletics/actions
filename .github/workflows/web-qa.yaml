@@ -99,5 +99,5 @@ jobs:
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}
           builder: builder
-          cache-from: type=registry,ref=${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/kaniko-cache
-          cache-to: type=registry,mode=max,image-manifest=true,oci-mediatypes=true,ref=${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/kaniko-cache
+          cache-from: type=registry,ref=${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/kaniko-cache:${{ github.event.repository.name }}
+          cache-to: type=registry,mode=max,image-manifest=true,oci-mediatypes=true,ref=${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/kaniko-cache:${{ github.event.repository.name }}
