@@ -33,6 +33,16 @@ on:
         required: false
         type: string
         default: "postgres:16"
+      runs_on:
+        description: >-
+          Runner label for both jobs. ubuntu-22.04-arm measured ~33% faster on
+          rspec than ubuntu-22.04 for fl-backend-rails, and removes the x64
+          CPU lottery (x64 standard runners draw from a mixed Zen3/Zen4/Xeon
+          fleet, giving a ~70% spread run to run; the arm fleet is uniform).
+          Opt in per repo: native gems must build on aarch64.
+        required: false
+        type: string
+        default: "ubuntu-22.04"
 
 env:
   BUNDLE_GITHUB__COM: "${{ secrets.PRIVATE_GEMS_SECRET }}:x-oauth-basic"
@@ -44,7 +54,7 @@ env:
 jobs:
   Tests:
     # You must use a Linux environment when using service containers or container jobs
-    runs-on: ubuntu-22.04
+    runs-on: ${{ inputs.runs_on }}
     timeout-minutes: ${{ inputs.rails_test_timeout_minutes || fromJSON(vars.BE_JOB_TIMEOUT || vars.DEFAULT_JOB_TIMEOUT) }}
     env:
       RAILS_ENV: test
@@ -60,14 +70,49 @@ jobs:
           - 5432:5432
         options: >-
           --health-cmd pg_isready
-          --health-interval 10s
+          --health-interval 2s
           --health-timeout 5s
-          --health-retries 15
+          --health-retries 30
     outputs:
       test_job_result: ${{ steps.test_job_result.outputs.test_job_result }}
     steps:
-      - name: Verify ImageMagick is available
-        run: command -v convert >/dev/null || command -v magick >/dev/null || { echo "ImageMagick not found on the runner image"; exit 1; }
+      - name: Restore cached runner packages
+        # Only images other than ubuntu-22.04 x64 are missing packages, so
+        # default consumers skip the cache probe entirely.
+        if: inputs.runs_on != 'ubuntu-22.04'
+        uses: actions/cache@v4
+        with:
+          path: ~/.ci-debs
+          key: rails-ci-debs-${{ inputs.runs_on }}-v1
+      - name: Ensure ImageMagick and psql are present
+        run: |
+          # No-op on ubuntu-22.04 x64, which ships both. The arm images ship
+          # ImageMagick but no postgres client, and the 24.04 images ship
+          # neither (dropped to stay inside the runner free-disk SLA,
+          # actions/runner-images#10772). psql is required whenever the schema
+          # is SQL-format, since structure.sql is loaded by shelling out to it.
+          NEED=""
+          command -v convert >/dev/null || command -v magick >/dev/null || NEED="$NEED imagemagick"
+          command -v psql >/dev/null || NEED="$NEED postgresql-client"
+          if [ -n "$NEED" ]; then
+            # dpkg -i on pre-fetched debs takes ~3s; the full apt path takes
+            # 13-21s. The saving is skipping update/resolve/triggers, not the
+            # download itself, which is only ~1s for ~1.3MB.
+            if ls ~/.ci-debs/*.deb >/dev/null 2>&1; then
+              echo "Installing$NEED from cached debs"
+              sudo dpkg -i ~/.ci-debs/*.deb >/dev/null 2>&1 || true
+            fi
+            if ! (command -v psql >/dev/null && { command -v convert >/dev/null || command -v magick >/dev/null; }); then
+              echo "Fetching runner packages:$NEED"
+              rm -rf ~/.ci-debs && mkdir -p ~/.ci-debs/partial
+              sudo apt-get update -qq
+              sudo apt-get install -y -qq --download-only -o Dir::Cache::archives="$HOME/.ci-debs" $NEED
+              sudo chown -R "$USER" ~/.ci-debs && rm -rf ~/.ci-debs/partial ~/.ci-debs/lock
+              sudo dpkg -i ~/.ci-debs/*.deb >/dev/null 2>&1 || sudo apt-get install -y -qq $NEED
+            fi
+          fi
+          command -v convert >/dev/null || command -v magick >/dev/null || { echo "ImageMagick not available"; exit 1; }
+          command -v psql >/dev/null || { echo "psql not available"; exit 1; }
       - name: Skip Duplicate Actions
         uses: fkirc/skip-duplicate-actions@v5.3.2
         with:
@@ -82,7 +127,8 @@ jobs:
           bundler-cache: true
       - name: Set up database
         run: |
-          pg_config --version
+          # diagnostic only; 24.04/arm images do not ship the postgres client
+          pg_config --version || echo "pg_config not on PATH (not required)"
       - name: Load database schema
         run: |
           echo "parallel_test_enabled" ${{  inputs.parallel_test_enabled }}
@@ -105,7 +151,7 @@ jobs:
         run: echo "test_job_result=${{job.status}}" >> $GITHUB_OUTPUT
   Linters:
     timeout-minutes: ${{ inputs.rails_linter_timeout_minutes || fromJSON(vars.BE_JOB_TIMEOUT || vars.DEFAULT_JOB_TIMEOUT)}}
-    runs-on: ubuntu-22.04
+    runs-on: ${{ inputs.runs_on }}
     outputs:
       linters_job_result: ${{ steps.linters_job_result.outputs.linters_job_result }}
     env:
@@ -120,7 +166,10 @@ jobs:
         with:
           bundler-cache: true
       - name: Lint Ruby files
-        run: bundle exec rubocop -D -c .rubocop.yml
+        # --parallel measured 96s -> 51s on ubuntu-22.04-arm (n=3 each, ranges
+        # do not overlap). Worth it even on 2-core runners. Note it is silently
+        # ignored if --cache false is ever added.
+        run: bundle exec rubocop -D -c .rubocop.yml --parallel
       - name: Set Linters result
         id: linters_job_result
         run: echo "linters_job_result=${{job.status}}" >> $GITHUB_OUTPUT
