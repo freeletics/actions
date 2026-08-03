@@ -76,14 +76,34 @@ jobs:
     outputs:
       test_job_result: ${{ steps.test_job_result.outputs.test_job_result }}
     steps:
+      - name: Identify the runner image
+        # ImageVersion is a machine environment variable, not part of the env
+        # context, so it has to be surfaced as a step output to be usable in a
+        # cache key below.
+        if: inputs.runs_on != 'ubuntu-22.04'
+        id: runner_image
+        run: echo "version=${ImageVersion:-unknown}" >> "$GITHUB_OUTPUT"
       - name: Restore cached runner packages
         # Only images other than ubuntu-22.04 x64 are missing packages, so
         # default consumers skip the cache probe entirely.
+        #
+        # The key includes the runner image version deliberately, and there are
+        # no restore-keys. actions/cache does not re-save on an exact primary
+        # key hit ("Cache hit occurred on the primary key ..., not saving
+        # cache"), so a key that never changes would freeze these debs until
+        # someone manually bumped it. Keying on the image means the packages
+        # refresh exactly when the thing they have to be installable on changes,
+        # and a stale entry can no longer outlive its image. Cost is one ~20s
+        # apt run per runner image release, then cached again.
+        #
+        # restore-keys would defeat that: a successful install from carried-over
+        # debs means they are never re-downloaded, and they would then be saved
+        # again under the new image's key.
         if: inputs.runs_on != 'ubuntu-22.04'
         uses: actions/cache@v4
         with:
           path: ~/.ci-debs
-          key: rails-ci-debs-${{ inputs.runs_on }}-v1
+          key: rails-ci-debs-${{ inputs.runs_on }}-${{ steps.runner_image.outputs.version }}-v1
       - name: Ensure ImageMagick and psql are present
         run: |
           # No-op on ubuntu-22.04 x64, which ships both. The arm images ship
