@@ -33,6 +33,26 @@ on:
         required: false
         type: string
         default: "postgres:16"
+      rubocop_parallel:
+        description: >-
+          Pass --parallel to rubocop. Opt-in, because it only pays off where the
+          runner has more than one physical core. Measured paired on the same
+          runner: ubuntu-22.04-arm 92s -> 58s, but ubuntu-22.04 76s -> 73s, which
+          is inside the noise. A standard x64 runner is two hyperthreads of one
+          core, so a second rubocop worker has nothing to run on.
+        required: false
+        type: string
+        default: "false"
+      runs_on:
+        description: >-
+          Runner label for both jobs. ubuntu-22.04-arm measured ~33% faster on
+          rspec than ubuntu-22.04 for fl-backend-rails, and removes the x64
+          CPU lottery (x64 standard runners draw from a mixed Zen3/Zen4/Xeon
+          fleet, giving a ~70% spread run to run; the arm fleet is uniform).
+          Opt in per repo: native gems must build on aarch64.
+        required: false
+        type: string
+        default: "ubuntu-22.04"
 
 env:
   BUNDLE_GITHUB__COM: "${{ secrets.PRIVATE_GEMS_SECRET }}:x-oauth-basic"
@@ -44,7 +64,7 @@ env:
 jobs:
   Tests:
     # You must use a Linux environment when using service containers or container jobs
-    runs-on: ubuntu-22.04
+    runs-on: ${{ inputs.runs_on }}
     timeout-minutes: ${{ inputs.rails_test_timeout_minutes || fromJSON(vars.BE_JOB_TIMEOUT || vars.DEFAULT_JOB_TIMEOUT) }}
     env:
       RAILS_ENV: test
@@ -60,14 +80,95 @@ jobs:
           - 5432:5432
         options: >-
           --health-cmd pg_isready
-          --health-interval 10s
+          --health-interval 2s
           --health-timeout 5s
-          --health-retries 15
+          --health-retries 75
     outputs:
       test_job_result: ${{ steps.test_job_result.outputs.test_job_result }}
     steps:
-      - name: Verify ImageMagick is available
-        run: command -v convert >/dev/null || command -v magick >/dev/null || { echo "ImageMagick not found on the runner image"; exit 1; }
+      - name: Identify the runner image
+        # ImageVersion is a machine environment variable, not part of the env
+        # context, so it has to be surfaced as a step output to be usable in the
+        # cache key below. If it is ever absent (self-hosted label, future runner
+        # change) fall back to the date, not a constant: a constant key can never
+        # be re-saved once it exists, so it would freeze the packages for good.
+        #
+        # Creating the directory here as well means the cache path always exists,
+        # so the post-job save cannot warn "Path(s) specified in the action for
+        # caching do(es) not exist" on an image that happens to ship both tools.
+        if: inputs.runs_on != 'ubuntu-22.04'
+        id: runner_image
+        run: |
+          mkdir -p ~/.ci-debs
+          echo "version=${ImageVersion:-$(date -u +%Y-%m-%d)}" >> "$GITHUB_OUTPUT"
+      - name: Restore cached runner packages
+        # Only images other than ubuntu-22.04 x64 are missing packages, so
+        # default consumers skip the cache probe entirely.
+        #
+        # The key includes the runner image version deliberately, and there are
+        # no restore-keys. actions/cache does not re-save on an exact primary
+        # key hit ("Cache hit occurred on the primary key ..., not saving
+        # cache"), so a key that never changes would freeze these debs until
+        # someone manually bumped it. Keying on the image means the packages
+        # refresh when the thing they have to be installable on changes. Cost is
+        # one ~20s apt run per runner image release, then cached again.
+        #
+        # restore-keys would defeat that: a successful install from carried-over
+        # debs means they are never re-downloaded, and they would then be saved
+        # again under the new image's key.
+        #
+        # Known limitation: GitHub cache entries are immutable per key, so a
+        # corrupt or partial entry cannot be replaced under the same key. The
+        # install step below falls back to plain apt, so CI keeps working, but it
+        # pays the full ~20s every run until the next image bump changes the key.
+        # Bump the -v1 suffix to force it sooner.
+        if: inputs.runs_on != 'ubuntu-22.04'
+        uses: actions/cache@v4
+        with:
+          path: ~/.ci-debs
+          key: rails-ci-debs-${{ inputs.runs_on }}-${{ steps.runner_image.outputs.version }}-v1
+      - name: Ensure ImageMagick and psql are present
+        run: |
+          # No-op on ubuntu-22.04 x64, which ships both. The arm images ship
+          # ImageMagick but no postgres client, and the 24.04 images ship
+          # neither (dropped to stay inside the runner free-disk SLA,
+          # actions/runner-images#10772). psql is required whenever the schema
+          # is SQL-format, since structure.sql is loaded by shelling out to it.
+          NEED=""
+          command -v convert >/dev/null || command -v magick >/dev/null || NEED="$NEED imagemagick"
+          command -v psql >/dev/null || NEED="$NEED postgresql-client"
+          if [ -n "$NEED" ]; then
+            # dpkg -i on pre-fetched debs takes ~3s; the full apt path takes
+            # 13-21s. The saving is skipping update/resolve/triggers, not the
+            # download itself, which is only ~1s for ~1.3MB.
+            if ls ~/.ci-debs/*.deb >/dev/null 2>&1; then
+              echo "Installing$NEED from cached debs"
+              # Output is deliberately not silenced: when this fails it is the
+              # only clue. A half-applied dpkg leaves packages unconfigured and
+              # would make the apt fallback below die on "dpkg was interrupted",
+              # so recover before falling through.
+              sudo dpkg -i ~/.ci-debs/*.deb || sudo dpkg --configure -a || true
+            fi
+            if ! (command -v psql >/dev/null && { command -v convert >/dev/null || command -v magick >/dev/null; }); then
+              echo "Fetching runner packages:$NEED"
+              rm -rf ~/.ci-debs && mkdir -p ~/.ci-debs/partial
+              # apt mirrors on hosted runners intermittently 403 or report a hash
+              # mismatch. Without a retry that is a hard job failure, and every
+              # opted-in repo hits this same path at once on an image bump.
+              for attempt in 1 2 3; do
+                sudo apt-get update -qq && break
+                echo "apt-get update failed (attempt $attempt), retrying"
+                sleep 5
+              done
+              sudo apt-get install -y -qq --download-only -o Dir::Cache::archives="$HOME/.ci-debs" $NEED
+              # id -un rather than $USER: the latter is unset in some contexts and
+              # chown -R "" fails the step after the download already succeeded.
+              sudo chown -R "$(id -un)" ~/.ci-debs && rm -rf ~/.ci-debs/partial ~/.ci-debs/lock
+              sudo dpkg -i ~/.ci-debs/*.deb || { sudo dpkg --configure -a || true; sudo apt-get install -y -qq $NEED; }
+            fi
+          fi
+          command -v convert >/dev/null || command -v magick >/dev/null || { echo "ImageMagick not available"; exit 1; }
+          command -v psql >/dev/null || { echo "psql not available"; exit 1; }
       - name: Skip Duplicate Actions
         uses: fkirc/skip-duplicate-actions@v5.3.2
         with:
@@ -80,9 +181,24 @@ jobs:
         name: Prepare ruby environment
         with:
           bundler-cache: true
-      - name: Set up database
+      - name: Wait for postgres to accept connections
         run: |
-          pg_config --version
+          # The service is marked healthy by a container-internal pg_isready,
+          # which can succeed against the temporary server the official postgres
+          # image runs during initdb with listen_addresses='' - i.e. before TCP
+          # 5432 is listening. At a 10s interval the first probe almost always
+          # landed after the real server was up; at 2s it can land inside that
+          # window. Checking from the host closes it, so the first real query
+          # cannot hit "the database system is starting up".
+          #
+          # This replaces a step named "Set up database" that only ran
+          # `pg_config --version` as a diagnostic and set nothing up.
+          for _ in $(seq 1 60); do
+            pg_isready -h "${PGHOST:-127.0.0.1}" -p 5432 -q && exit 0
+            sleep 1
+          done
+          echo "postgres did not start accepting connections within 60s"
+          exit 1
       - name: Load database schema
         run: |
           echo "parallel_test_enabled" ${{  inputs.parallel_test_enabled }}
@@ -105,7 +221,7 @@ jobs:
         run: echo "test_job_result=${{job.status}}" >> $GITHUB_OUTPUT
   Linters:
     timeout-minutes: ${{ inputs.rails_linter_timeout_minutes || fromJSON(vars.BE_JOB_TIMEOUT || vars.DEFAULT_JOB_TIMEOUT)}}
-    runs-on: ubuntu-22.04
+    runs-on: ${{ inputs.runs_on }}
     outputs:
       linters_job_result: ${{ steps.linters_job_result.outputs.linters_job_result }}
     env:
@@ -120,7 +236,16 @@ jobs:
         with:
           bundler-cache: true
       - name: Lint Ruby files
-        run: bundle exec rubocop -D -c .rubocop.yml
+        # Opt-in via rubocop_parallel, because the gain depends on the runner
+        # having real cores: measured paired on one runner, ubuntu-22.04-arm goes
+        # 92s -> 58s while ubuntu-22.04 goes 76s -> 73s, i.e. nothing. Note
+        # --parallel is silently ignored if --cache false is ever added, and that
+        # rubocop caches results between runs, so a second run in the same job
+        # completes in ~3s regardless of mode and cannot be used to compare them.
+        run: |
+          FLAGS=""
+          if [ "${{ inputs.rubocop_parallel }}" = "true" ]; then FLAGS="--parallel"; fi
+          bundle exec rubocop -D -c .rubocop.yml $FLAGS
       - name: Set Linters result
         id: linters_job_result
         run: echo "linters_job_result=${{job.status}}" >> $GITHUB_OUTPUT
