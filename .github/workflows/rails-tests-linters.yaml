@@ -60,6 +60,13 @@ env:
   PGHOST: 127.0.0.1
   PGUSER: postgres
   PGPASSWORD: postgres
+  # Spring is a development preloader; in CI every command runs once in a fresh
+  # container, so the spring server it forks is pure overhead. It also blocks
+  # `config.enable_reloading = false` in test.rb — Spring raises rather than
+  # preload without the reloader, and repos whose bin/rails is springified hit
+  # that on `rails db:create`. Bundler puts ./bin on PATH, so `bundle exec rails`
+  # picks up the springified binstub too.
+  DISABLE_SPRING: "1"
 
 jobs:
   Tests:
