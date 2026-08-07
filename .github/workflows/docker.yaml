@@ -62,28 +62,20 @@ jobs:
           name: ${{ inputs.ARTIFACTS_NAME }}
           path: ${{ github.workspace }}/${{ inputs.ARTIFACTS_NAME }}
 
-      # Accepts either `.tar.zst` or `.tar.gz`, picking whichever the
-      # producing workflow actually uploaded. Detection rather than a
-      # swap, because this workflow is shared by 16 repos and every
-      # existing caller uploads gzip — they keep working untouched.
-      # zstd is preinstalled on the GitHub-hosted ubuntu images.
+      # `tar -xf` auto-detects the compression format, so this handles
+      # `.tar.gz` (every caller today) and `.tar.zst` (web-astro, PE-48093)
+      # without naming either.
       - name: Uncompress Artifacts
         if: ${{ inputs.ARTIFACTS_COMPRESSED == true }}
+        env:
+          DIR: ${{ github.workspace }}/${{ inputs.ARTIFACTS_NAME }}
+          NAME: ${{ inputs.ARTIFACTS_NAME }}
+          WORKSPACE: ${{ github.workspace }}
         run: |
           set -euo pipefail
-          DIR="${{ github.workspace }}/${{ inputs.ARTIFACTS_NAME }}"
-          NAME="${{ inputs.ARTIFACTS_NAME }}"
-          if [ -f "$DIR/$NAME.tar.zst" ]; then
-            echo "Extracting $NAME.tar.zst (zstd)"
-            zstd -dc "$DIR/$NAME.tar.zst" | tar -xf - -C "${{ github.workspace }}"
-          elif [ -f "$DIR/$NAME.tar.gz" ]; then
-            echo "Extracting $NAME.tar.gz (gzip)"
-            tar -xzf "$DIR/$NAME.tar.gz" -C "${{ github.workspace }}"
-          else
-            echo "::error::No $NAME.tar.zst or $NAME.tar.gz found in $DIR"
-            ls -la "$DIR" || true
-            exit 1
-          fi
+          ARCHIVE=$(find "$DIR" -maxdepth 1 -name "$NAME.tar.*" -print -quit)
+          [ -n "$ARCHIVE" ] || { echo "::error::No $NAME.tar.* in $DIR"; ls -la "$DIR"; exit 1; }
+          tar -xf "$ARCHIVE" -C "$WORKSPACE"
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6.2.3

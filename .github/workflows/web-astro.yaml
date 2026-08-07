@@ -155,38 +155,17 @@ jobs:
           CI: "false"
           APP_ENV: "${{ env.APP_ENV }}"
 
-      # zstd rather than gzip. Measured on 745 MB / ~15k files over 3
-      # replicates per arch (PE-48093, run 31191398581):
+      # zstd, not gzip: 13-17x faster and 5x smaller (PE-48093).
       #
-      #   gzip -6 (was)   18.2s x64 / 13.3s ARM -> 168 MB
-      #   zstd -3 -T0     1.4s  x64 /  0.8s ARM ->  32 MB
-      #
-      # 13-17x faster AND 5x smaller. gzip's 32 KB window cannot dedupe
-      # across files; the blog's ~15k pages share layout, nav, inline CSS
-      # and JSON-LD, and zstd's much larger window exploits that. The
-      # smaller artifact also cuts upload here and download in the docker
-      # job, which untars either format (see docker.yaml).
-      #
-      # `set -o pipefail` is load-bearing: GitHub's default shell is
-      # `bash -e`, which does NOT set it, so a failing `tar` would be
-      # masked by zstd exiting 0 and we would upload a truncated artifact
-      # that only surfaces as a broken deploy. Verified: without pipefail
-      # that pipeline exits 0 leaving a 45-byte "archive".
-      #
-      # zstd is preinstalled on the GitHub-hosted ubuntu images (x64 and
-      # arm64); the fallback keeps a missing binary from breaking a build.
+      # `pipefail` is load-bearing — GitHub's default shell is `bash -e`,
+      # which does NOT set it, so a failing `tar` would be masked by zstd
+      # exiting 0 and we would upload a truncated artifact that only
+      # surfaces as a broken deploy.
       - name: Compress Artifacts
         run: |
           set -euo pipefail
-          if command -v zstd >/dev/null 2>&1; then
-            tar -cf - "${{ inputs.BUILD_OUTPUT_DIR }}" | zstd -3 -T0 -q -o public.tar.zst
-            zstd -t public.tar.zst
-            ls -lh public.tar.zst
-          else
-            echo "::warning::zstd not found on this runner image — falling back to gzip"
-            tar -czf public.tar.gz "${{ inputs.BUILD_OUTPUT_DIR }}"
-            ls -lh public.tar.gz
-          fi
+          tar -cf - "${{ inputs.BUILD_OUTPUT_DIR }}" | zstd -3 -T0 -qf -o public.tar.zst
+          zstd -t public.tar.zst
 
       - name: Archive production artifacts
         uses: actions/upload-artifact@v7
@@ -194,10 +173,8 @@ jobs:
           name: public
           path: |
             public.tar.zst
-            public.tar.gz
-          # The tarball is already compressed. upload-artifact zips its
-          # input by default, so the default level burns CPU recompressing
-          # compressed data for no size gain — measured 7s -> 3s (PE-48093).
+          # Already compressed; upload-artifact zips its input by default,
+          # which recompresses compressed data for no gain (7s -> 3s).
           compression-level: 0
           if-no-files-found: error
           retention-days: 5
