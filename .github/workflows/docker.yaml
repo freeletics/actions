@@ -62,10 +62,28 @@ jobs:
           name: ${{ inputs.ARTIFACTS_NAME }}
           path: ${{ github.workspace }}/${{ inputs.ARTIFACTS_NAME }}
 
+      # Accepts either `.tar.zst` or `.tar.gz`, picking whichever the
+      # producing workflow actually uploaded. Detection rather than a
+      # swap, because this workflow is shared by 16 repos and every
+      # existing caller uploads gzip — they keep working untouched.
+      # zstd is preinstalled on the GitHub-hosted ubuntu images.
       - name: Uncompress Artifacts
         if: ${{ inputs.ARTIFACTS_COMPRESSED == true }}
-        run: tar -xzf ${{ github.workspace }}/${{ inputs.ARTIFACTS_NAME }}/${{
-          inputs.ARTIFACTS_NAME }}.tar.gz -C ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          DIR="${{ github.workspace }}/${{ inputs.ARTIFACTS_NAME }}"
+          NAME="${{ inputs.ARTIFACTS_NAME }}"
+          if [ -f "$DIR/$NAME.tar.zst" ]; then
+            echo "Extracting $NAME.tar.zst (zstd)"
+            zstd -dc "$DIR/$NAME.tar.zst" | tar -xf - -C "${{ github.workspace }}"
+          elif [ -f "$DIR/$NAME.tar.gz" ]; then
+            echo "Extracting $NAME.tar.gz (gzip)"
+            tar -xzf "$DIR/$NAME.tar.gz" -C "${{ github.workspace }}"
+          else
+            echo "::error::No $NAME.tar.zst or $NAME.tar.gz found in $DIR"
+            ls -la "$DIR" || true
+            exit 1
+          fi
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6.2.3
