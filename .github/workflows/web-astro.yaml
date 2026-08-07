@@ -155,8 +155,26 @@ jobs:
           CI: "false"
           APP_ENV: "${{ env.APP_ENV }}"
 
+      # `pigz` is parallel gzip — same output format, so the docker job's
+      # `tar -xzf` is unchanged, but it uses both runner cores instead of
+      # one. Measured on 745 MB / ~15k files (PE-48093, 3 reps per arch):
+      # 18.2s -> 11.5s on x64, 13.3s -> 6.8s on ARM. Falls back to plain
+      # gzip if a future runner image ever drops pigz.
+      #
+      # `set -o pipefail` is load-bearing: the default GitHub shell is
+      # `bash -e`, which does NOT set it, so a failing `tar` in the
+      # pipeline would be masked by pigz exiting 0 and we would upload a
+      # truncated artifact that only surfaces as a broken deploy.
       - name: Compress Artifacts
-        run: tar -czf public.tar.gz "${{ inputs.BUILD_OUTPUT_DIR }}"
+        run: |
+          set -euo pipefail
+          if command -v pigz >/dev/null 2>&1; then
+            tar -cf - "${{ inputs.BUILD_OUTPUT_DIR }}" | pigz > public.tar.gz
+          else
+            echo "::warning::pigz not found on this runner image — falling back to single-threaded gzip"
+            tar -czf public.tar.gz "${{ inputs.BUILD_OUTPUT_DIR }}"
+          fi
+          ls -lh public.tar.gz
 
       - name: Archive production artifacts
         uses: actions/upload-artifact@v7
@@ -164,6 +182,10 @@ jobs:
           name: public
           path: |
             public.tar.gz
+          # The tarball is already gzipped. upload-artifact zips its input
+          # by default, so the default level burns CPU re-compressing
+          # compressed data for no size gain — measured 7s -> 3s (PE-48093).
+          compression-level: 0
           retention-days: 5
 
   docker:
