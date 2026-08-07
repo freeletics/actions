@@ -2,10 +2,10 @@ name: "Astro Build with Docker Kaniko"
 
 # Reusable build workflow for static Astro (Bun) sites such as
 # freeletics-web-astro. Counterpart to `web-blog.yaml` (Gatsby/yarn) and
-# `web.yaml` (Vite/pnpm). Produces the same artifact contract as those
-# workflows (a `public.tar.gz` archive uploaded under the artifact name
-# `public`) so the downstream docker/integration/QA workflows can be
-# reused without modification.
+# `web.yaml` (Vite/pnpm). Uploads a `public.tar.zst` archive under the
+# artifact name `public`; the downstream docker/integration/QA workflows
+# extract with `tar -xf`, which auto-detects the format, so they accept
+# the `.tar.gz` those sibling workflows still produce too.
 #
 # Consumer responsibilities
 # -------------------------
