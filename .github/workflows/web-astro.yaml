@@ -77,6 +77,11 @@ on:
         description: "Name of the npm script that fetches CMS data (delta mode). Skipped when CMS_DATA_DIR is empty."
         type: string
         default: "cms:dump"
+      runs_on:
+        required: false
+        description: "Runner label for the build job. `ubuntu-24.04-arm` measured ~10% faster than x64 for the Astro build (PE-48094, n=5). Opt-in per repo; the default keeps current behaviour."
+        type: string
+        default: "ubuntu-latest"
 
 permissions:
   id-token: write
@@ -89,7 +94,7 @@ jobs:
     env:
       APP_ENV: "${{ contains(github.ref, 'refs/tags/') && 'production' || inputs.APP_ENV }}"
     name: Build app
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runs_on }}
     steps:
       ################################# PRE STEPS ###############################################
       - name: Skip Duplicate Actions
