@@ -62,10 +62,20 @@ jobs:
           name: ${{ inputs.ARTIFACTS_NAME }}
           path: ${{ github.workspace }}/${{ inputs.ARTIFACTS_NAME }}
 
+      # `tar -xf` auto-detects the compression format, so this handles
+      # `.tar.gz` (every caller today) and `.tar.zst` (web-astro, PE-48093)
+      # without naming either.
       - name: Uncompress Artifacts
         if: ${{ inputs.ARTIFACTS_COMPRESSED == true }}
-        run: tar -xzf ${{ github.workspace }}/${{ inputs.ARTIFACTS_NAME }}/${{
-          inputs.ARTIFACTS_NAME }}.tar.gz -C ${{ github.workspace }}
+        env:
+          DIR: ${{ github.workspace }}/${{ inputs.ARTIFACTS_NAME }}
+          NAME: ${{ inputs.ARTIFACTS_NAME }}
+          WORKSPACE: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          ARCHIVE=$(find "$DIR" -maxdepth 1 -name "$NAME.tar.*" -print -quit)
+          [ -n "$ARCHIVE" ] || { echo "::error::No $NAME.tar.* in $DIR"; ls -la "$DIR"; exit 1; }
+          tar -xf "$ARCHIVE" -C "$WORKSPACE"
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6.2.3

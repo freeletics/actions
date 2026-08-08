@@ -2,10 +2,10 @@ name: "Astro Build with Docker Kaniko"
 
 # Reusable build workflow for static Astro (Bun) sites such as
 # freeletics-web-astro. Counterpart to `web-blog.yaml` (Gatsby/yarn) and
-# `web.yaml` (Vite/pnpm). Produces the same artifact contract as those
-# workflows (a `public.tar.gz` archive uploaded under the artifact name
-# `public`) so the downstream docker/integration/QA workflows can be
-# reused without modification.
+# `web.yaml` (Vite/pnpm). Uploads a `public.tar.zst` archive under the
+# artifact name `public`; the downstream docker/integration/QA workflows
+# extract with `tar -xf`, which auto-detects the format, so they accept
+# the `.tar.gz` those sibling workflows still produce too.
 #
 # Consumer responsibilities
 # -------------------------
@@ -155,15 +155,28 @@ jobs:
           CI: "false"
           APP_ENV: "${{ env.APP_ENV }}"
 
+      # zstd, not gzip: 13-17x faster and 5x smaller (PE-48093).
+      #
+      # `pipefail` is load-bearing — GitHub's default shell is `bash -e`,
+      # which does NOT set it, so a failing `tar` would be masked by zstd
+      # exiting 0 and we would upload a truncated artifact that only
+      # surfaces as a broken deploy.
       - name: Compress Artifacts
-        run: tar -czf public.tar.gz "${{ inputs.BUILD_OUTPUT_DIR }}"
+        run: |
+          set -euo pipefail
+          tar -cf - "${{ inputs.BUILD_OUTPUT_DIR }}" | zstd -3 -T0 -qf -o public.tar.zst
+          zstd -t public.tar.zst
 
       - name: Archive production artifacts
         uses: actions/upload-artifact@v7
         with:
           name: public
           path: |
-            public.tar.gz
+            public.tar.zst
+          # Already compressed; upload-artifact zips its input by default,
+          # which recompresses compressed data for no gain (7s -> 3s).
+          compression-level: 0
+          if-no-files-found: error
           retention-days: 5
 
   docker:
