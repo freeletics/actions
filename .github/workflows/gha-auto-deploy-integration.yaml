@@ -99,16 +99,16 @@ jobs:
             type=sha,enable=true,priority=600,prefix=gha-,suffix=
             type=raw,enable=true,priority=600,prefix=gha-deploy-int-,value=${{ steps.timestamp.outputs.date }}
 
+      - name: Set GeoLite2 cache key
+        id: geoip-cache
+        run: echo "date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
       - name: Create and use a new builder instance
         run: |
           docker buildx create --name builder --use
-
-      - name: Set GeoLite2 cache key
-        id: geoip-cache
-        run: echo "date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
 
       - name: Build and push
         id: build
@@ -118,6 +118,9 @@ jobs:
         with:
           context: .
           file: "${{ inputs.DOCKERFILE }}"
+          build-args: |
+            ${{ inputs.BUILD_ARGS }}
+            GEOLITE2_CACHE_BUST=${{ steps.geoip-cache.outputs.date }}
           push: true
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}

@@ -104,6 +104,10 @@ jobs:
             type=sha,enable=true,priority=600,prefix=gha-,suffix=
             type=raw,enable=true,priority=600,prefix=gha-deploy-int-,value=${{ steps.timestamp.outputs.date }}
 
+      - name: Set GeoLite2 cache key
+        id: geoip-cache
+        run: echo "date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
@@ -119,16 +123,15 @@ jobs:
         with:
           context: .
           file: "${{ inputs.DOCKERFILE }}"
+          build-args: |
+            ${{ inputs.BUILD_ARGS }}
+            GEOLITE2_CACHE_BUST=${{ steps.geoip-cache.outputs.date }}
           push: true
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}
           builder: builder
           cache-from: type=registry,ref=${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/kaniko-cache:${{ github.event.repository.name }}
           cache-to: type=registry,mode=max,image-manifest=true,oci-mediatypes=true,ref=${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com/kaniko-cache:${{ github.event.repository.name }}
-
-      - name: Set GeoLite2 cache key
-        id: geoip-cache
-        run: echo "date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
 
       - name: Build and push (retry after stalled pull)
         if: steps.build.outcome == 'failure'
