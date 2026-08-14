@@ -114,6 +114,30 @@ jobs:
         run: echo "date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
 
       - name: Build and push
+        id: build
+        timeout-minutes: 8
+        continue-on-error: true
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: "${{ inputs.DOCKERFILE }}"
+          build-args: |
+            ${{ inputs.BUILD_ARGS }}
+            GEOLITE2_CACHE_BUST=${{ steps.geoip-cache.outputs.date }}
+          push: true
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}
+          builder: builder
+          cache-from: type=registry,ref=${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{
+            inputs.AWS_REGION }}.amazonaws.com/kaniko-cache:${{
+            github.event.repository.name }}
+          cache-to: type=registry,mode=max,image-manifest=true,oci-mediatypes=true,ref=${{
+            inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION
+            }}.amazonaws.com/kaniko-cache:${{ github.event.repository.name }}
+
+      - name: Build and push (retry after stalled pull)
+        if: steps.build.outcome == 'failure'
+        timeout-minutes: 8
         uses: docker/build-push-action@v7
         with:
           context: .
