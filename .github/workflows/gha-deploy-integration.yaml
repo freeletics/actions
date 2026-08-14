@@ -3,6 +3,9 @@ name: "Deploy integration"
 on:
   workflow_call:
     inputs:
+      BUILD_ARGS:
+        type: string
+        required: false
       ARTIFACTS_NAME:
         type: string
         required: false
