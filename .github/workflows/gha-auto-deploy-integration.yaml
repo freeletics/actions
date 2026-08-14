@@ -106,6 +106,10 @@ jobs:
         run: |
           docker buildx create --name builder --use
 
+      - name: Set GeoLite2 cache key
+        id: geoip-cache
+        run: echo "date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
       - name: Build and push
         id: build
         timeout-minutes: 8
