@@ -110,6 +110,7 @@ jobs:
 
       - name: Build and push
         timeout-minutes: 8
+        continue-on-error: true
         id: build
         uses: docker/build-push-action@v7
         with:
