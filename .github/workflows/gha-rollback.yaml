@@ -1,0 +1,429 @@
+name: Rollback
+
+# Re-points a service at an image that is ALREADY in ECR, without rebuilding it.
+#
+# Why this exists
+# ---------------
+# Flux never looks at git tags -- it only scans ECR. Each service's ImagePolicy
+# in tf_freeletics_cd (production/<app>/deploy.yaml) filters ECR tags by prefix
+# and picks the alphabetically-highest one, then ImageUpdateAutomation writes it
+# into overlays/production/<app>/kustomization.yaml.
+#
+# So today a rollback means creating a new git tag on an old commit, which fires
+# docker.yaml and rebuilds from source: slow, and not even bit-identical, since
+# the base image, apt/gem resolution and GEOLITE2_CACHE_BUST all move on.
+#
+# This workflow instead copies the manifest of an existing image onto a fresh
+# deploy-prod-<timestamp> tag. It is a metadata-only registry write: no layers
+# are uploaded, no builder starts, and the digest is preserved -- so the tag
+# Flux picks up is byte-for-byte the image that was known good.
+#
+# Permissions: this needs ecr:BatchGetImage + ecr:PutImage, which the
+# fl-<env>-<repo> role already holds (tf_freeletics_github_oidc/main.tf,
+# aws_iam_policy_document.ecr) because `docker push` requires them. No IAM
+# change is needed to adopt this.
+#
+# Adoption -- drop this in as .github/workflows/rollback.yaml in the service repo:
+#
+#   name: Rollback
+#   on:
+#     workflow_dispatch:
+#       inputs:
+#         source_tag:
+#           description: ECR tag to roll back to (empty = previous prod image)
+#           required: false
+#         dry_run:
+#           description: Only report what would happen
+#           type: boolean
+#           default: false
+#   jobs:
+#     rollback:
+#       name: Rollback
+#       permissions:
+#         id-token: write
+#         contents: write
+#         deployments: write
+#       uses: freeletics/actions/.github/workflows/gha-rollback.yaml@main
+#       with:
+#         AWS_REGION: "eu-west-1"
+#         AWS_ACCOUNT_ID: "524690225562"
+#         source_tag: ${{ inputs.source_tag }}
+#         dry_run: ${{ inputs.dry_run }}
+#       secrets: inherit
+
+on:
+  workflow_call:
+    inputs:
+      AWS_REGION:
+        required: true
+        type: string
+      AWS_ACCOUNT_ID:
+        required: true
+        type: string
+      AWS_ECR_ENV_NAME:
+        required: false
+        type: string
+        default: "prod"
+      environment:
+        description: >-
+          Which tag stream to publish into: production (deploy-prod-<date>) or
+          integration (gha-deploy-int-<epoch>). Must match the ImagePolicy the
+          service uses in tf_freeletics_cd.
+        required: false
+        type: string
+        default: "production"
+      tag_prefix:
+        description: >-
+          Overrides the tag prefix derived from `environment`. Needed for
+          services whose ImagePolicy uses a non-standard pattern, e.g. coach
+          filters on '^deploy-prod-stable-'.
+        required: false
+        type: string
+        default: ""
+      source_tag:
+        description: >-
+          Existing ECR tag to roll back to. Leave empty to auto-pick the most
+          recent image in the stream that differs from what is live now.
+        required: false
+        type: string
+        default: ""
+      create_git_tag:
+        description: >-
+          Also create the matching git tag and bump freeletics/releases, so the
+          repo records what is actually running. Never triggers a rebuild.
+        required: false
+        type: boolean
+        default: true
+      dry_run:
+        description: Resolve and report the rollback target without writing anything.
+        required: false
+        type: boolean
+        default: false
+    outputs:
+      new_tag:
+        description: The tag written to ECR, i.e. what Flux will roll out.
+        value: ${{ jobs.rollback.outputs.new_tag }}
+      source_tag:
+        description: The existing tag whose image was re-tagged.
+        value: ${{ jobs.rollback.outputs.source_tag }}
+      source_digest:
+        description: Digest of the rolled-back image.
+        value: ${{ jobs.rollback.outputs.source_digest }}
+
+permissions:
+  id-token: write
+  contents: write
+  deployments: write
+
+concurrency:
+  # Two rollbacks racing would both mint a timestamp tag and the later one wins
+  # arbitrarily. Serialise them per repo+environment.
+  group: rollback-${{ github.repository }}-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    name: Rollback
+    runs-on: ubuntu-latest
+    # Deliberately not the shared BE_JOB_TIMEOUT: this job does no building, and
+    # during an incident a stuck rollback should fail fast rather than sit in a
+    # build-sized timeout.
+    timeout-minutes: 15
+    outputs:
+      new_tag: ${{ steps.target.outputs.new_tag }}
+      source_tag: ${{ steps.target.outputs.source_tag }}
+      source_digest: ${{ steps.target.outputs.source_digest }}
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6.2.3
+        with:
+          role-to-assume: arn:aws:iam::${{ inputs.AWS_ACCOUNT_ID }}:role/github-actions/fl-${{ inputs.AWS_ECR_ENV_NAME }}-${{ github.event.repository.name }}
+          aws-region: ${{ inputs.AWS_REGION }}
+
+      - name: Resolve rollback target
+        id: target
+        shell: bash
+        env:
+          ECR_REPO: ${{ github.event.repository.name }}
+          ENVIRONMENT: ${{ inputs.environment }}
+          TAG_PREFIX: ${{ inputs.tag_prefix }}
+          SOURCE_TAG: ${{ inputs.source_tag }}
+        run: |
+          set -euo pipefail
+
+          case "$ENVIRONMENT" in
+            production)
+              prefix="${TAG_PREFIX:-deploy-prod-}"
+              new_tag="${prefix}$(date -u +'%Y-%m-%d-%H-%M-%S')"
+              ;;
+            integration)
+              prefix="${TAG_PREFIX:-gha-deploy-int-}"
+              new_tag="${prefix}$(date -u +'%s')"
+              ;;
+            *)
+              echo "::error::environment must be 'production' or 'integration', got '$ENVIRONMENT'"
+              exit 1
+              ;;
+          esac
+
+          # One listing, reused for every lookup below.
+          images=$(aws ecr describe-images --repository-name "$ECR_REPO" --output json)
+
+          # Every tag in this service's stream, newest first. Both tag formats
+          # are fixed-width, so a string sort is also a chronological sort.
+          stream=$(jq -c --arg p "$prefix" '
+            [ .imageDetails[]
+              | . as $i
+              | ($i.imageTags // [])[]
+              | select(startswith($p))
+              | {tag: ., digest: $i.imageDigest} ]
+            | sort_by(.tag) | reverse' <<<"$images")
+
+          live_tag=$(jq -r '.[0].tag // empty' <<<"$stream")
+          live_digest=$(jq -r '.[0].digest // empty' <<<"$stream")
+
+          if [ -z "$live_tag" ]; then
+            echo "::error::no tags matching '${prefix}*' in ECR repository '$ECR_REPO' -- is tag_prefix right for this service?"
+            exit 1
+          fi
+          echo "Currently live: $live_tag ($live_digest)"
+
+          if [ -n "$SOURCE_TAG" ]; then
+            # Look the tag up across ALL tags, not just the stream, so you can
+            # also roll back onto a gha-<sha> build tag.
+            src_tag="$SOURCE_TAG"
+            src_digest=$(jq -r --arg t "$SOURCE_TAG" '
+              [ .imageDetails[] | select((.imageTags // []) | index($t)) | .imageDigest ] | .[0] // empty' <<<"$images")
+            if [ -z "$src_digest" ]; then
+              echo "::error::tag '$SOURCE_TAG' not found in ECR repository '$ECR_REPO'. It may have been expired by the repository lifecycle policy."
+              exit 1
+            fi
+          else
+            # Anchor on the OLDEST tag carrying the live digest -- i.e. where the
+            # running image first entered the stream -- then take the newest
+            # distinct image below it. Simply picking "newest tag with a
+            # different digest" would, on a second consecutive rollback, hand
+            # back the very image we just rolled away from.
+            previous=$(jq -c --arg d "$live_digest" '
+              . as $s
+              | ([ range(0; $s | length) | select($s[.].digest == $d) ] | last) as $anchor
+              | [ $s[($anchor + 1):][] | select(.digest != $d) ] | .[0] // empty' <<<"$stream")
+            if [ -z "$previous" ]; then
+              echo "::error::no image older than the running one in the '${prefix}*' stream. Pass source_tag explicitly to pick a target."
+              exit 1
+            fi
+            src_tag=$(jq -r '.tag' <<<"$previous")
+            src_digest=$(jq -r '.digest' <<<"$previous")
+          fi
+
+          if [ "$src_digest" = "$live_digest" ]; then
+            echo "::error::'$src_tag' resolves to the image already live ($live_digest). Nothing to roll back."
+            exit 1
+          fi
+
+          # Best-effort: the build tags every image with gha-<short-sha> too, so
+          # the sibling tag on this digest tells us which commit produced it.
+          src_sha=$(jq -r --arg d "$src_digest" '
+            [ .imageDetails[] | select(.imageDigest == $d) | (.imageTags // [])[] ]
+            | map(select(test("^gha-[0-9a-f]{7,40}$"))) | .[0] // empty' <<<"$images")
+
+          # Repositories created with active_repo = true (see
+          # tf_freeletics_global .../modules/aws_ecr_repository) expire *any*
+          # image 60 days after it was pushed. Adding a tag does not reset
+          # imagePushedAt, so a rollback onto a nearly-expired image can leave
+          # production running an image ECR is about to delete -- fine for
+          # running pods, ImagePullBackOff for the next one scheduled.
+          age_days=""
+          src_pushed=$(jq -r --arg d "$src_digest" '
+            [ .imageDetails[] | select(.imageDigest == $d) | .imagePushedAt ] | .[0] // empty' <<<"$images")
+          if [ -n "$src_pushed" ]; then
+            pushed_epoch=$(date -u -d "$src_pushed" +%s 2>/dev/null || true)
+            if [ -n "$pushed_epoch" ]; then
+              age_days=$(( ( $(date -u +%s) - pushed_epoch ) / 86400 ))
+              echo "Target image was pushed $age_days days ago ($src_pushed)"
+              if [ "$age_days" -gt 45 ]; then
+                echo "::warning::${src_tag} was pushed ${age_days} days ago and may be expired by the ECR lifecycle policy soon. Treat this as a stopgap and land a forward fix."
+              fi
+            fi
+          fi
+
+          {
+            echo "new_tag=$new_tag"
+            echo "source_tag=$src_tag"
+            echo "source_digest=$src_digest"
+            echo "source_sha=${src_sha#gha-}"
+            echo "source_age_days=$age_days"
+            echo "live_tag=$live_tag"
+            echo "live_digest=$live_digest"
+            echo "registry=${{ inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION }}.amazonaws.com"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Rolling back to: $src_tag ($src_digest) -> new tag $new_tag"
+
+      - name: Re-tag image in ECR
+        if: ${{ !inputs.dry_run }}
+        shell: bash
+        env:
+          ECR_REPO: ${{ github.event.repository.name }}
+          SRC_DIGEST: ${{ steps.target.outputs.source_digest }}
+          NEW_TAG: ${{ steps.target.outputs.new_tag }}
+        run: |
+          set -euo pipefail
+
+          # batch-get-image returns the manifest as stored; put-image writes the
+          # same bytes back under a new tag. Same digest, no layer traffic --
+          # this is the whole rollback, and it takes about a second.
+          image=$(aws ecr batch-get-image \
+            --repository-name "$ECR_REPO" \
+            --image-ids "imageDigest=$SRC_DIGEST" \
+            --accepted-media-types \
+              "application/vnd.docker.distribution.manifest.v2+json" \
+              "application/vnd.docker.distribution.manifest.list.v2+json" \
+              "application/vnd.oci.image.manifest.v1+json" \
+              "application/vnd.oci.image.index.v1+json" \
+            --output json)
+
+          manifest=$(jq -r '.images[0].imageManifest // empty' <<<"$image")
+          media_type=$(jq -r '.images[0].imageManifestMediaType // empty' <<<"$image")
+          if [ -z "$manifest" ]; then
+            echo "::error::could not read manifest for $SRC_DIGEST"
+            exit 1
+          fi
+
+          aws ecr put-image \
+            --repository-name "$ECR_REPO" \
+            --image-tag "$NEW_TAG" \
+            --image-manifest "$manifest" \
+            --image-manifest-media-type "$media_type" \
+            --output json > /dev/null
+
+          echo "Tagged $ECR_REPO:$NEW_TAG -> $SRC_DIGEST"
+
+      ##### Bookkeeping. None of this affects the rollout; Flux is already on it.
+      ##### Failures here must not mark the rollback as failed.
+
+      # Not gated on create_git_tag: the GitHub deployment record below wants the
+      # rolled-back commit too, and recording it against the dispatch branch head
+      # instead would point at code that is not running.
+      - name: Check out code
+        if: ${{ !inputs.dry_run }}
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Resolve rolled-back commit
+        id: commit
+        if: ${{ !inputs.dry_run }}
+        continue-on-error: true
+        shell: bash
+        env:
+          SRC_TAG: ${{ steps.target.outputs.source_tag }}
+          SRC_SHA: ${{ steps.target.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          sha=""
+          if git rev-parse -q --verify "refs/tags/${SRC_TAG}^{commit}" >/dev/null; then
+            sha=$(git rev-parse "refs/tags/${SRC_TAG}^{commit}")
+          elif [ -n "$SRC_SHA" ] && git rev-parse -q --verify "${SRC_SHA}^{commit}" >/dev/null; then
+            sha=$(git rev-parse "${SRC_SHA}^{commit}")
+          else
+            echo "::warning::could not map '$SRC_TAG' back to a commit; skipping git tag and releases bump"
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Create git tag
+        if: ${{ inputs.create_git_tag && !inputs.dry_run && steps.commit.outputs.sha != '' }}
+        continue-on-error: true
+        uses: actions/github-script@v9.0.0
+        with:
+          # Deliberately github.token and NOT JENKINS_PAT_FLUXCD: refs created
+          # with GITHUB_TOKEN do not start workflow runs, so this tag records the
+          # rollback without re-triggering docker.yaml. Using the PAT here (as
+          # gha-create-tag.yaml does, on purpose) would rebuild and undo the
+          # entire point of this workflow.
+          script: |
+            await github.rest.git.createRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: "refs/tags/${{ steps.target.outputs.new_tag }}",
+              sha: "${{ steps.commit.outputs.sha }}"
+            })
+
+      ##### Git versions ####
+      - name: Check out releases
+        if: ${{ inputs.create_git_tag && !inputs.dry_run && steps.commit.outputs.sha != '' }}
+        continue-on-error: true
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+          repository: 'freeletics/releases'
+          path: 'releases'
+          ref: 'main'
+          token: ${{ secrets.JENKINS_PAT_FLUXCD }}
+
+      - name: Update versions.yaml
+        if: ${{ inputs.create_git_tag && !inputs.dry_run && steps.commit.outputs.sha != '' }}
+        continue-on-error: true
+        uses: mikefarah/yq@v4.53.3
+        with:
+          cmd: yq -i e '.${{ github.event.repository.name }} = "${{ steps.target.outputs.new_tag }}"' releases/versions.yaml
+
+      - name: Push versions.yaml back
+        if: ${{ inputs.create_git_tag && !inputs.dry_run && steps.commit.outputs.sha != '' }}
+        continue-on-error: true
+        run: |
+          cd releases
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add versions.yaml
+          git commit -m "${{ github.event.repository.name }} ROLLBACK to ${{ steps.target.outputs.source_tag }}"
+          git push
+
+      - name: Create GitHub deployment
+        id: deployment
+        if: ${{ !inputs.dry_run && steps.commit.outputs.sha != '' }}
+        continue-on-error: true
+        uses: chrnorm/deployment-action@v2
+        with:
+          token: '${{ github.token }}'
+          environment: ${{ inputs.environment }}
+          initial-status: in_progress
+          ref: ${{ steps.commit.outputs.sha }}
+          payload: "{\"docker_image_tag\":\"${{ steps.target.outputs.new_tag }}\",\"deployed_by\":\"${{ github.actor }}\",\"rollback_from\":\"${{ steps.target.outputs.live_tag }}\",\"rollback_to\":\"${{ steps.target.outputs.source_tag }}\"}"
+
+      - name: Summary
+        if: always() && steps.target.outputs.new_tag != ''
+        shell: bash
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+          REGISTRY: ${{ steps.target.outputs.registry }}
+          ECR_REPO: ${{ github.event.repository.name }}
+          NEW_TAG: ${{ steps.target.outputs.new_tag }}
+          SRC_TAG: ${{ steps.target.outputs.source_tag }}
+          SRC_DIGEST: ${{ steps.target.outputs.source_digest }}
+          SRC_AGE: ${{ steps.target.outputs.source_age_days }}
+          LIVE_TAG: ${{ steps.target.outputs.live_tag }}
+        run: |
+          {
+            if [ "$DRY_RUN" = "true" ]; then
+              echo "### Rollback (dry run -- nothing was written)"
+            else
+              echo "### Rollback published"
+            fi
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Image | \`$REGISTRY/$ECR_REPO\` |"
+            echo "| Was live | \`$LIVE_TAG\` |"
+            echo "| Rolled back to | \`$SRC_TAG\` |"
+            echo "| Digest | \`$SRC_DIGEST\` |"
+            echo "| New tag for Flux | \`$NEW_TAG\` |"
+            if [ -n "$SRC_AGE" ]; then echo "| Image age | $SRC_AGE days |"; fi
+            echo
+            echo "Flux scans ECR every 1m, ImageUpdateAutomation commits every 1m and the"
+            echo "Kustomization reconciles every 30s, so expect the rollout to start within"
+            echo "~1-3 minutes. Watch the commit land in tf_freeletics_cd."
+            echo
+            echo "> Note: this rolls back **code, not database schema**. Migrations already"
+            echo "> applied stay applied."
+          } >> "$GITHUB_STEP_SUMMARY"
