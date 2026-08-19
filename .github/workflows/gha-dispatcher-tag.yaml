@@ -49,7 +49,7 @@ jobs:
 
       - name: Login to Amazon ECR Private
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2.1.6
+        uses: aws-actions/amazon-ecr-login@v2.1.7
 
         # for tag we use gha-prod
       - uses: docker/metadata-action@v6.2.0
