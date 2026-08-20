@@ -364,7 +364,7 @@ jobs:
       - name: Update versions.yaml
         if: ${{ inputs.create_git_tag && !inputs.dry_run && steps.commit.outputs.sha != '' }}
         continue-on-error: true
-        uses: mikefarah/yq@v4.53.3
+        uses: mikefarah/yq@v4.53.5
         with:
           cmd: yq -i e '.${{ github.event.repository.name }} = "${{ steps.target.outputs.new_tag }}"' releases/versions.yaml
 
