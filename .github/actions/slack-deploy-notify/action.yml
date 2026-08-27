@@ -170,7 +170,7 @@ runs:
         else
           compare="${SERVER_URL}/${OWNER}/${REPO}/compare/$(url_encode_ref "$default_branch")...$(url_encode_ref "$BRANCH")"
           diff_txt=$(slack_escape "${default_branch}...${BRANCH}")
-          text=":information_source: Custom branch: ${who} is deploying \`${service_txt}\` to \`${env_txt}\` from \`${branch_txt}\`, diff: <${compare}|${diff_txt}>"
+          text=":information_source: Custom branch: ${who} is deploying \`${service_txt}\` to \`${env_txt}\`, diff: <${compare}|${diff_txt}>"
         fi
 
         {
