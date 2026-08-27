@@ -166,11 +166,11 @@ runs:
 
         if [ "$BRANCH" = "$default_branch" ]; then
           # Not a custom branch: someone is handing the environment back.
-          text=":information_source: ${who} Deploying \`${branch_txt}\` to ${env_txt} for *${service_txt}* -- back on the default branch"
+          text=":information_source: ${who} is deploying \`${branch_txt}\` to ${env_txt} for *${service_txt}* -- back on the default branch"
         else
           compare="${SERVER_URL}/${OWNER}/${REPO}/compare/$(url_encode_ref "$default_branch")...$(url_encode_ref "$BRANCH")"
           diff_txt=$(slack_escape "${default_branch}...${BRANCH}")
-          text=":information_source: ${who} Deploying custom branch \`${branch_txt}\` to ${env_txt} for *${service_txt}*, diff: <${compare}|${diff_txt}>"
+          text=":information_source: ${who} is deploying custom branch \`${branch_txt}\` to ${env_txt} for *${service_txt}*, diff: <${compare}|${diff_txt}>"
         fi
 
         {
