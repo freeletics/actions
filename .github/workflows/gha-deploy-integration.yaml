@@ -31,6 +31,32 @@ on:
         required: false
         type: boolean
         default: true
+      SLACK_NOTIFY:
+        description: >-
+          Announce the deploy in Slack. Integration is shared, so this is on by
+          default: turn it off only for services nobody else tests against.
+        required: false
+        type: boolean
+        default: true
+      SLACK_TARGET:
+        description: >-
+          Which channel to announce in. `auto` derives it from fl-bolt's
+          ghaMapping (WEB* services go to the web channel, everything else to
+          backend); `backend` / `web` force it, `none` is the same as
+          SLACK_NOTIFY: false.
+        required: false
+        type: string
+        default: "auto"
+    secrets:
+      # All callers use `secrets: inherit`, so these are declared purely to
+      # document what this workflow reaches for. Each one degrades to a warning
+      # when unset -- the deploy itself never depends on them.
+      SLACK_CIR_BACKEND_HOOK:
+        required: false
+      SLACK_CIR_WEB_HOOK:
+        required: false
+      JENKINS_PAT_FLUXCD:
+        required: false
 
 permissions:
   id-token: write
@@ -154,6 +180,28 @@ jobs:
             inputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ inputs.AWS_REGION
             }}.amazonaws.com/kaniko-cache:${{ github.event.repository.name }}
 
+
+      # Integration is shared: a custom branch parked on it quietly invalidates
+      # whatever everyone else is testing. Announce who took it, for which
+      # service, and what is in the branch.
+      #
+      # Deliberately after the push rather than before the build: an image that
+      # never built is not a deploy, and a false alarm in this channel trains
+      # people to ignore it. Deliberately continue-on-error: a Slack outage must
+      # never be the reason a deploy is marked failed.
+      #
+      # Service names and Slack handles come from freeletics/fl-bolt at run time
+      # -- see the action for why, and add new services/people there, not here.
+      - name: Announce deploy in Slack
+        if: ${{ inputs.SLACK_NOTIFY }}
+        continue-on-error: true
+        uses: freeletics/actions/.github/actions/slack-deploy-notify@main
+        with:
+          github_token: ${{ secrets.JENKINS_PAT_FLUXCD }}
+          slack_webhook_backend: ${{ secrets.SLACK_CIR_BACKEND_HOOK }}
+          slack_webhook_web: ${{ secrets.SLACK_CIR_WEB_HOOK }}
+          environment: Integration
+          target: ${{ inputs.SLACK_TARGET }}
 
       # we will not activate GH deployment creation for a custom branch deployment for now
       - uses: chrnorm/deployment-action@v2

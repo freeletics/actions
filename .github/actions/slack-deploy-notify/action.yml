@@ -1,0 +1,225 @@
+name: "Slack deploy notification"
+description: >-
+  Announce in Slack who is deploying which branch of which service, routing the
+  message to the backend or the web channel.
+
+# Integration is a shared environment: one person's custom branch sitting on it
+# silently breaks everyone else's testing. This posts "who / which branch /
+# which service / what changed" so the channel can see it happen.
+#
+# Service names and Slack handles are NOT duplicated here. Both are read at run
+# time from freeletics/fl-bolt, which is already the single source of truth for
+# the Slack bot:
+#
+#   src/config/constants.js        ghaMapping: SERVICE key -> GitHub repo name
+#   src/localDB/github-to-slack.yml  GitHub login -> Slack member ID
+#
+# Add a new service or a new colleague there and this action picks it up on the
+# next deploy -- nothing in this repo needs to change.
+#
+# Every failure mode here degrades instead of blocking: an unreachable fl-bolt,
+# an unmapped repo or an unknown GitHub login all still produce a message, just
+# a less decorated one. Callers should additionally set `continue-on-error: true`
+# so a Slack outage can never fail a deploy.
+
+inputs:
+  github_token:
+    description: >-
+      Token with read access to freeletics/fl-bolt (JENKINS_PAT_FLUXCD). Without
+      it the mappings are skipped and the raw repo name / GitHub handle are used.
+    required: false
+    default: ""
+  slack_webhook_backend:
+    description: Incoming webhook for the backend channel (SLACK_CIR_BACKEND_HOOK).
+    required: false
+    default: ""
+  slack_webhook_web:
+    description: Incoming webhook for the web channel (SLACK_CIR_WEB_HOOK).
+    required: false
+    default: ""
+  environment:
+    description: Environment being deployed to, as it should read in the message.
+    required: false
+    default: "Integration"
+  target:
+    description: >-
+      Which channel to post in. `auto` derives it from the fl-bolt mapping (keys
+      starting with WEB go to the web channel, everything else to backend);
+      `backend` / `web` force it; `none` disables the notification.
+    required: false
+    default: "auto"
+  branch:
+    description: Branch being deployed. Defaults to the ref the workflow runs on.
+    required: false
+    default: ""
+  actor:
+    description: GitHub login of the deployer. Defaults to the run's actor.
+    required: false
+    default: ""
+
+runs:
+  using: "composite"
+  steps:
+    - name: Build deploy message
+      id: message
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+        TARGET: ${{ inputs.target }}
+        ENVIRONMENT: ${{ inputs.environment }}
+        REPO: ${{ github.event.repository.name }}
+        OWNER: ${{ github.repository_owner }}
+        SERVER_URL: ${{ github.server_url }}
+        ACTOR: ${{ inputs.actor != '' && inputs.actor || github.actor }}
+        BRANCH: ${{ inputs.branch != '' && inputs.branch || github.ref_name }}
+        # Web repos are on `main`, the Rails services on `master`; never assume.
+        DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      run: |
+        set -uo pipefail
+
+        default_branch="${DEFAULT_BRANCH:-master}"
+
+        # Text that ends up between Slack's own markup needs these three
+        # escaped; URLs get percent-encoding instead.
+        # https://docs.slack.dev/messaging/formatting-message-text
+        slack_escape() {
+          printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
+        }
+
+        # An unescaped '&' in the href would cut the link short in Slack. Encode
+        # per path segment so that a branch like `fix/PE-1&2` survives while the
+        # slashes GitHub's compare URL needs stay literal.
+        url_encode_ref() {
+          jq -rR 'split("/") | map(@uri) | join("/")' <<<"$1"
+        }
+
+        # Raw file out of the (private) fl-bolt repo. Never fatal: a missing or
+        # expired PAT costs us the decoration, not the message.
+        fl_bolt_file() {
+          [ -n "$GH_TOKEN" ] || return 1
+          curl -fsSL --max-time 20 \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github.raw" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/freeletics/fl-bolt/contents/$1?ref=main"
+        }
+
+        ##### Which service is this? ghaMapping maps SERVICE -> repo name, so we
+        ##### look the repo up on the value side to get the name humans use.
+        service=""
+        if constants=$(fl_bolt_file "src/config/constants.js"); then
+          service=$(printf '%s\n' "$constants" \
+            | sed -n '/const ghaMapping[[:space:]]*=[[:space:]]*{/,/^};/p' \
+            | sed 's:[[:space:]]//.*::' \
+            | awk -F: -v repo="$REPO" '
+                NF < 2 { next }
+                { gsub(/[ \t]/, "", $1); gsub(/[ \t",]/, "", $2) }
+                $2 == repo { print $1; exit }')
+        else
+          echo "::warning::could not read fl-bolt constants.js -- falling back to the repo name"
+        fi
+
+        if [ -z "$service" ]; then
+          echo "::warning::'$REPO' is not in ghaMapping (freeletics/fl-bolt src/config/constants.js) -- add it there to get the service name and channel routing right"
+          service="$REPO"
+        fi
+
+        ##### Which channel? The WEB* keys are the web services; anything we
+        ##### could not resolve falls back to a guess on the repo name.
+        channel="$TARGET"
+        if [ "$channel" = "auto" ]; then
+          case "$service" in
+            WEB*)   channel="web" ;;
+            "$REPO")  # unresolved -- guess rather than post to the wrong channel silently
+              case "$REPO" in
+                *web*) channel="web" ;;
+                *)     channel="backend" ;;
+              esac
+              echo "::warning::guessed the '$channel' channel from the repo name; set the action's target input to be explicit"
+              ;;
+            *)      channel="backend" ;;
+          esac
+        fi
+
+        ##### Who deployed? Unlisted logins stay plaintext, as documented in
+        ##### fl-bolt's github-to-slack.yml.
+        slack_id=""
+        if mapping=$(fl_bolt_file "src/localDB/github-to-slack.yml"); then
+          slack_id=$(printf '%s\n' "$mapping" \
+            | sed 's/#.*$//' \
+            | awk -F: -v user="$ACTOR" '
+                NF < 2 { next }
+                { gsub(/[ \t]/, "", $1); gsub(/[ \t]/, "", $2) }
+                $1 != "" && tolower($1) == tolower(user) { print $2; exit }')
+        fi
+
+        if [ -n "$slack_id" ]; then
+          who="<@${slack_id}>"
+        else
+          who="$(slack_escape "$ACTOR")"
+          echo "::notice::'$ACTOR' has no Slack member ID in freeletics/fl-bolt src/localDB/github-to-slack.yml -- add it to be @-mentioned"
+        fi
+
+        branch_txt=$(slack_escape "$BRANCH")
+        service_txt=$(slack_escape "$service")
+        env_txt=$(slack_escape "$ENVIRONMENT")
+
+        if [ "$BRANCH" = "$default_branch" ]; then
+          # Not a custom branch: someone is handing the environment back.
+          text=":information_source: ${who} Deploying \`${branch_txt}\` to ${env_txt} for *${service_txt}* -- back on the default branch"
+        else
+          compare="${SERVER_URL}/${OWNER}/${REPO}/compare/$(url_encode_ref "$default_branch")...$(url_encode_ref "$BRANCH")"
+          diff_txt=$(slack_escape "${default_branch}...${BRANCH}")
+          text=":information_source: ${who} Deploying custom branch \`${branch_txt}\` to ${env_txt} for *${service_txt}*, diff: <${compare}|${diff_txt}>"
+        fi
+
+        {
+          echo "channel=$channel"
+          echo "text<<SLACK_MESSAGE_EOF"
+          echo "$text"
+          echo "SLACK_MESSAGE_EOF"
+        } >> "$GITHUB_OUTPUT"
+
+        echo "Channel: $channel"
+        echo "Message: $text"
+
+    - name: Post to Slack
+      shell: bash
+      env:
+        CHANNEL: ${{ steps.message.outputs.channel }}
+        TEXT: ${{ steps.message.outputs.text }}
+        # Both are passed in and picked here so no webhook URL ever travels
+        # through a step output.
+        WEBHOOK_BACKEND: ${{ inputs.slack_webhook_backend }}
+        WEBHOOK_WEB: ${{ inputs.slack_webhook_web }}
+      run: |
+        set -uo pipefail
+
+        case "$CHANNEL" in
+          web)     webhook="$WEBHOOK_WEB"; secret_name="SLACK_CIR_WEB_HOOK" ;;
+          backend) webhook="$WEBHOOK_BACKEND"; secret_name="SLACK_CIR_BACKEND_HOOK" ;;
+          none)    echo "Notification disabled (target: none)"; exit 0 ;;
+          *)       echo "::error::unknown target '$CHANNEL' -- expected auto, backend, web or none"; exit 1 ;;
+        esac
+
+        if [ -z "$webhook" ]; then
+          echo "::warning::$secret_name is not set for this repository -- skipping the Slack notification"
+          exit 0
+        fi
+
+        # jq does the JSON escaping; unfurling off so the compare link stays a
+        # link instead of a full-width GitHub preview.
+        payload=$(jq -nc --arg text "$TEXT" '{text: $text, unfurl_links: false, unfurl_media: false}')
+
+        response=$(curl -sS --max-time 20 --retry 2 --retry-delay 3 \
+          -X POST -H 'Content-Type: application/json' \
+          --data "$payload" "$webhook") || {
+            echo "::warning::could not reach Slack -- deploy is unaffected"
+            exit 0
+          }
+
+        if [ "$response" != "ok" ]; then
+          echo "::warning::Slack rejected the message: $response"
+          exit 0
+        fi
+        echo "Posted to the $CHANNEL channel"
