@@ -153,12 +153,23 @@ jobs:
         env:
           APP_ENV: "${{ env.APP_ENV }}"
 
+      # Consumers call this workflow with `secrets: inherit`, so a secret the caller's repo
+      # defines is already in scope here — it just has to be mapped into the step's env to be
+      # visible to the build. Anything a repo does not define resolves to an empty string, so
+      # adding one is inert for every other consumer.
+      #
+      # ROLLBAR_SERVER_TOKEN uploads browser source maps at the end of the build
+      # (freeletics-web-astro: scripts/upload-sourcemaps.ts). It has to happen inside the build:
+      # the maps must never reach the artifact — they are unminified source and the pod would
+      # serve them — so they exist only between `astro build` and the upload. Doing it in a later
+      # job means shipping them somewhere first and then policing the serving layer.
       - name: Build
         run: bun run build
         env:
           NODE_ENV: "production"
           CI: "false"
           APP_ENV: "${{ env.APP_ENV }}"
+          ROLLBAR_SERVER_TOKEN: "${{ secrets.ROLLBAR_SERVER_TOKEN }}"
 
       # zstd, not gzip: 13-17x faster and 5x smaller (PE-48093).
       #
