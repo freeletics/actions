@@ -131,7 +131,7 @@ jobs:
         # pays the full ~20s every run until the next image bump changes the key.
         # Bump the -v1 suffix to force it sooner.
         if: inputs.runs_on != 'ubuntu-22.04'
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.ci-debs
           key: rails-ci-debs-${{ inputs.runs_on }}-${{ steps.runner_image.outputs.version }}-v1
