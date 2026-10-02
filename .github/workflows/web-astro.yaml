@@ -18,8 +18,8 @@ name: "Astro Build with Docker Kaniko"
 #    so the script must not rely on incremental sync state from a previous
 #    run.
 #
-# Both scripts receive `APP_ENV` and `NODE_ENV` in the environment;
-# how they read secrets (committed `.env.<env>` files, GitHub secrets
+# Both scripts receive `APP_ENV`; the build script additionally gets
+# `NODE_ENV=production`. How they read secrets (committed `.env.<env>` files, GitHub secrets
 # injected by the consumer's wrapper, etc.) is out of scope here.
 #
 # Build flow
@@ -126,15 +126,20 @@ jobs:
       - name: Install deps
         run: bun install --frozen-lockfile
 
-      # No snapshot cache: every consumer pulls in full, which wipes the directory anyway, and a
-      # delta on top of a cached snapshot is unsafe for freeletics-web-astro (posts embed copies of
-      # their category/author/tags; deletions and discarded drafts are never seen). A cache only
-      # added a restore that `--full` discarded and a new ~13 MB entry per run.
+      # No snapshot cache: CMS_DATA_DIR starts empty on every run (freeletics-web-astro gitignores
+      # it). A restored snapshot was not harmless: `--full` only replaces the type/locale folders it
+      # fetches, so anything else in the snapshot (e.g. types or locales from an older Contentstack
+      # pull) stayed and was built. And a delta on top of a cached snapshot is unsafe for that site:
+      # posts embed copies of their category/author/tags, and deletions or discarded drafts are
+      # never seen. The cache also added a new ~13 MB entry per run.
       - name: Pull CMS
         if: inputs.CMS_DATA_DIR != ''
-        run: bun run ${{ inputs.CMS_DUMP_SCRIPT }}
+        # Through env, never interpolated into `run:`: the script name is caller input, and
+        # `.npmrc` already holds NPM_TOKEN at this point.
+        run: bun run "$CMS_DUMP_SCRIPT"
         env:
           APP_ENV: "${{ env.APP_ENV }}"
+          CMS_DUMP_SCRIPT: "${{ inputs.CMS_DUMP_SCRIPT }}"
 
       # Consumers call this workflow with `secrets: inherit`, so a secret the caller's repo
       # defines is already in scope here — it just has to be mapped into the step's env to be
