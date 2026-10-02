@@ -1,0 +1,110 @@
+name: "Production gem removal check"
+description: >-
+  Fail when a branch removes a gem from the bundle the production image
+  installs, unless the pull request carries the override label.
+
+# The image installs gems without the development and test groups
+# (docker-rails-baseimage), but CI runs rspec with them loaded. So when a bump
+# drops a transitive production gem that a test gem still pulls in, CI stays
+# green and production breaks: core-user-rails #4767 removed public_suffix that
+# way, while webmock, vcr and capybara kept loading it in tests.
+#
+# This compares the production gem set at the merge base with the one at HEAD
+# and fails if a gem disappeared. It reads the Gemfile and Gemfile.lock only, so
+# it needs neither the gems nor the database, and it skips repos without a
+# Dockerfile, which ship no production bundle.
+
+inputs:
+  github_token:
+    description: >-
+      Token with pull-requests: read, to look up the override label. Without
+      that scope the lookup fails and the label is ignored.
+    required: false
+    default: ${{ github.token }}
+  override_label:
+    description: Pull request label that lets the check pass despite a removal.
+    required: false
+    default: "gem-removal-reviewed"
+
+runs:
+  using: composite
+  steps:
+    - name: Compare production gems with the base branch
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+        OVERRIDE_LABEL: ${{ inputs.override_label }}
+        BASE_BRANCH: ${{ github.base_ref || github.event.repository.default_branch }}
+        # On pull_request events HEAD is the test merge commit, which belongs
+        # to no pull request; the labels hang off the PR head.
+        HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        SCRIPT: ${{ github.action_path }}/production_gems.rb
+      run: |
+        set -euo pipefail
+
+        if [ ! -f Dockerfile ] || [ ! -f Gemfile.lock ]; then
+          echo "No Dockerfile or no Gemfile.lock: there is no production bundle to check."
+          exit 0
+        fi
+
+        # Compare against the merge base, i.e. what the pull request diff shows,
+        # so gems the base branch dropped since the branch was cut do not count.
+        # The checkout is shallow; if 50 commits on either side do not reach the
+        # merge base, fetch the full history once rather than guess a depth.
+        BASE_REF="refs/remotes/origin/$BASE_BRANCH"
+        git fetch --quiet --no-tags --depth=50 origin "+refs/heads/$BASE_BRANCH:$BASE_REF"
+        if ! BASE=$(git merge-base HEAD "$BASE_REF"); then
+          git fetch --quiet --no-tags --unshallow origin "+refs/heads/$BASE_BRANCH:$BASE_REF" "$(git rev-parse HEAD)"
+          BASE=$(git merge-base HEAD "$BASE_REF")
+        fi
+
+        if git diff --quiet "$BASE" HEAD -- Gemfile Gemfile.lock; then
+          echo "Gemfile and Gemfile.lock are unchanged since $BASE_BRANCH (${BASE:0:9}), nothing to check."
+          exit 0
+        fi
+
+        # A full checkout of the base, because Gemfiles read sibling files
+        # (.ruby-version, gemspecs, eval_gemfile).
+        BASE_TREE="$RUNNER_TEMP/production-gem-removal-base"
+        git worktree add --quiet --detach "$BASE_TREE" "$BASE"
+        trap 'git worktree remove --force "$BASE_TREE"' EXIT
+
+        ruby "$SCRIPT" "$BASE_TREE" > "$RUNNER_TEMP/production-gems-base.txt"
+        ruby "$SCRIPT" . > "$RUNNER_TEMP/production-gems-head.txt"
+        # Ruby sorts bytewise; comm must compare the same way.
+        REMOVED=$(LC_ALL=C comm -23 "$RUNNER_TEMP/production-gems-base.txt" "$RUNNER_TEMP/production-gems-head.txt")
+
+        if [ -z "$REMOVED" ]; then
+          echo "No gem removed from the production bundle since $BASE_BRANCH (${BASE:0:9})."
+          exit 0
+        fi
+
+        # Read live rather than from the event payload, which a re-run replays
+        # unchanged: applying the label and re-running this job is enough.
+        if LABELS=$(gh api "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA/pulls" \
+            --jq '.[] | select(.state == "open") | .labels[].name' 2>&1); then
+          if grep -qxF "$OVERRIDE_LABEL" <<<"$LABELS"; then
+            echo "::notice title=Production gem removal overridden::Removed from the production bundle, accepted by the $OVERRIDE_LABEL label: $(paste -sd ' ' - <<<"$REMOVED")"
+            exit 0
+          fi
+        else
+          # gh prints the JSON error body, then "gh: <message> (HTTP <status>)"
+          # without a line break in between.
+          echo "::warning title=Override label not checked::Could not read the pull request labels: $(tail -n1 <<<"${LABELS##*gh: }")"
+        fi
+
+        COUNT=$(wc -l <<<"$REMOVED" | tr -d ' ')
+        echo "::error title=Gems removed from the production image::$COUNT gem(s) the production image installs on $BASE_BRANCH are gone on this branch: $(paste -sd ' ' - <<<"$REMOVED"). Add the ones the app uses to the Gemfile, or apply the $OVERRIDE_LABEL label and re-run this job."
+        {
+          echo "### Gems removed from the production image"
+          echo
+          echo "The production image installs the bundle without the \`development\` and \`test\` groups. These gems are in it on \`$BASE_BRANCH\` (${BASE:0:9}) but not on this branch:"
+          echo
+          sed 's/^/- `/; s/$/`/' <<<"$REMOVED"
+          echo
+          echo "Tests can still pass while a development or test gem pulls them in, so check whether the app uses them:"
+          echo
+          echo "- **It does:** add the gem to the \`Gemfile\` outside the \`development\` and \`test\` groups."
+          echo "- **It does not:** apply the \`$OVERRIDE_LABEL\` label to the pull request, then re-run this job."
+        } | tee -a "$GITHUB_STEP_SUMMARY"
+        exit 1
