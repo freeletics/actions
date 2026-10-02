@@ -12,10 +12,11 @@ name: "Astro Build with Docker Kaniko"
 # The consuming repo's `package.json` must expose:
 #  - A `build` script that runs `astro build` (or equivalent) and
 #    emits its output under `BUILD_OUTPUT_DIR` (default `dist`).
-#  - A `cms:dump` script (configurable via `CMS_DUMP_SCRIPT`) that
-#    snapshots the CMS into `CMS_DATA_DIR` (default `data/cms`) in
-#    delta mode — i.e. reads its own incremental sync state and only
-#    fetches records updated since the last successful run.
+#  - A CMS dump script (configurable via `CMS_DUMP_SCRIPT`) that writes a
+#    full snapshot of the CMS into `CMS_DATA_DIR` (default `data/cms`).
+#    Every run starts from an empty directory: there is no snapshot cache,
+#    so the script must not rely on incremental sync state from a previous
+#    run.
 #
 # Both scripts receive `APP_ENV` and `NODE_ENV` in the environment;
 # how they read secrets (committed `.env.<env>` files, GitHub secrets
@@ -24,17 +25,15 @@ name: "Astro Build with Docker Kaniko"
 # Build flow
 # ----------
 #  1. `bun install --frozen-lockfile`
-#  2. Restore the previous CMS snapshot from cache (keyed per repo + env).
-#  3. Run the CMS dump script — fetches only changed records since the
-#     restored snapshot's last `updated_at`.
-#  4. Run the build script.
-#  5. tar + upload the build output as the artifact `public`.
+#  2. Run the CMS dump script (full pull).
+#  3. Run the build script.
+#  4. tar + upload the build output as the artifact `public`.
 #
 # A `.tool-versions` file at the repo root pinning `bun <version>` is
 # the recommended way to lock the runtime — pass that version via the
 # `BUN_VERSION` input from the consumer's wrapper workflow.
 #
-# Apps without a CMS can pass `CMS_DATA_DIR: ""` to disable steps 2 + 3.
+# Apps without a CMS can pass `CMS_DATA_DIR: ""` to disable step 2.
 
 on:
   workflow_call:
@@ -69,14 +68,14 @@ on:
         default: "dist"
       CMS_DATA_DIR:
         required: false
-        description: "Path of the directory holding the CMS snapshot to cache across runs. The consumer's `cms:dump` script must read/write its incremental sync state here. Set to an empty string to disable the CMS data step (e.g. for Astro apps without a CMS)."
+        description: "Path of the directory the CMS dump script writes its snapshot to. Set to an empty string to disable the CMS dump step (e.g. for Astro apps without a CMS)."
         type: string
         default: "data/cms"
       CMS_DUMP_SCRIPT:
         required: false
-        description: "Name of the npm script that fetches CMS data (delta mode). Skipped when CMS_DATA_DIR is empty."
+        description: "Name of the npm script that fetches CMS data (full pull). Skipped when CMS_DATA_DIR is empty. Defaults to Strapi, published only; freeletics-web-astro's `cms:dump` is the legacy Contentstack provider."
         type: string
-        default: "cms:dump"
+        default: "cms:dump:strapi"
       runs_on:
         required: false
         description: "Runner label for the build job. `ubuntu-24.04-arm` measured ~10% faster than x64 for the Astro build (PE-48094, n=5). Opt-in per repo; the default keeps current behaviour."
@@ -127,27 +126,11 @@ jobs:
       - name: Install deps
         run: bun install --frozen-lockfile
 
-      # Restore the previous CMS snapshot so the dump script can do a
-      # delta fetch (Contentstack `query={"updated_at":{"$gt": …}}`) instead
-      # of a full re-pull. The key is unique per run so we always save a
-      # new entry; the restore-key prefix pulls the most recent snapshot
-      # for this env. Cache size is unbounded per run but GitHub evicts
-      # the oldest entries once total repo cache exceeds 10 GB.
-      #
-      # Caveat: delta mode does not detect deletions. Schedule a periodic
-      # `--full` re-pull in the consumer repo (e.g. a weekly cron
-      # workflow) to reconcile.
-      - name: Restore CMS data cache
-        if: inputs.CMS_DATA_DIR != ''
-        id: cms-cache
-        uses: actions/cache@v6
-        with:
-          path: ${{ inputs.CMS_DATA_DIR }}
-          key: ${{ runner.os }}-cms-${{ github.event.repository.name }}-${{ env.APP_ENV }}-${{ github.run_id }}
-          restore-keys: |
-            ${{ runner.os }}-cms-${{ github.event.repository.name }}-${{ env.APP_ENV }}-
-
-      - name: Pull CMS delta
+      # No snapshot cache: every consumer pulls in full, which wipes the directory anyway, and a
+      # delta on top of a cached snapshot is unsafe for freeletics-web-astro (posts embed copies of
+      # their category/author/tags; deletions and discarded drafts are never seen). A cache only
+      # added a restore that `--full` discarded and a new ~13 MB entry per run.
+      - name: Pull CMS
         if: inputs.CMS_DATA_DIR != ''
         run: bun run ${{ inputs.CMS_DUMP_SCRIPT }}
         env:
