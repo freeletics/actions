@@ -230,6 +230,14 @@ jobs:
   Linters:
     timeout-minutes: ${{ inputs.rails_linter_timeout_minutes || fromJSON(vars.BE_JOB_TIMEOUT || vars.DEFAULT_JOB_TIMEOUT)}}
     runs-on: ${{ inputs.runs_on }}
+    # pull-requests: read lets the gem removal check see the override label. A
+    # job-level block replaces the top-level one, hence the repetition. Every
+    # caller has to grant pull-requests: read too: a reusable workflow that asks
+    # for more than its caller gives fails to start.
+    permissions:
+      actions: write
+      contents: read
+      pull-requests: read
     outputs:
       linters_job_result: ${{ steps.linters_job_result.outputs.linters_job_result }}
     env:
@@ -244,6 +252,7 @@ jobs:
         with:
           bundler-cache: true
       - name: Lint Ruby files
+        id: rubocop
         # Opt-in via rubocop_parallel, because the gain depends on the runner
         # having real cores: measured paired on one runner, ubuntu-22.04-arm goes
         # 92s -> 58s while ubuntu-22.04 goes 76s -> 73s, i.e. nothing. Note
@@ -254,6 +263,12 @@ jobs:
           FLAGS=""
           if [ "${{ inputs.rubocop_parallel }}" = "true" ]; then FLAGS="--parallel"; fi
           bundle exec rubocop -D -c .rubocop.yml $FLAGS
+      - name: Check for gems removed from the production image
+        # In this job rather than its own, because only "Tests" and "Linters"
+        # are required checks, and auto-merge waits for required checks only.
+        # Also runs after a rubocop failure, so one push reports both.
+        if: success() || steps.rubocop.outcome == 'failure'
+        uses: freeletics/actions/.github/actions/production-gem-removal@main
       - name: Set Linters result
         id: linters_job_result
         run: echo "linters_job_result=${{job.status}}" >> $GITHUB_OUTPUT
