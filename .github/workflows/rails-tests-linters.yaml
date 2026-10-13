@@ -45,14 +45,16 @@ on:
         default: "false"
       runs_on:
         description: >-
-          Runner label for both jobs. ubuntu-22.04-arm measured ~33% faster on
-          rspec than ubuntu-22.04 for fl-backend-rails, and removes the x64
-          CPU lottery (x64 standard runners draw from a mixed Zen3/Zen4/Xeon
-          fleet, giving a ~70% spread run to run; the arm fleet is uniform).
-          Opt in per repo: native gems must build on aarch64.
+          Runner label for both jobs. Defaults to arm: ubuntu-22.04-arm measured
+          ~33% faster on rspec than ubuntu-22.04 for fl-backend-rails, and
+          removes the x64 CPU lottery (x64 standard runners draw from a mixed
+          Zen3/Zen4/Xeon fleet, giving a ~70% spread run to run; the arm fleet
+          is uniform). Native gems must build on aarch64; a repo whose gems do
+          not can pass ubuntu-26.04. The 22.04 labels are retired on
+          2027-04-17 (actions/runner-images#14254).
         required: false
         type: string
-        default: "ubuntu-22.04"
+        default: "ubuntu-26.04-arm"
 
 env:
   BUNDLE_GITHUB__COM: "${{ secrets.PRIVATE_GEMS_SECRET }}:x-oauth-basic"
@@ -104,15 +106,11 @@ jobs:
         # Creating the directory here as well means the cache path always exists,
         # so the post-job save cannot warn "Path(s) specified in the action for
         # caching do(es) not exist" on an image that happens to ship both tools.
-        if: inputs.runs_on != 'ubuntu-22.04'
         id: runner_image
         run: |
           mkdir -p ~/.ci-debs
           echo "version=${ImageVersion:-$(date -u +%Y-%m-%d)}" >> "$GITHUB_OUTPUT"
       - name: Restore cached runner packages
-        # Only images other than ubuntu-22.04 x64 are missing packages, so
-        # default consumers skip the cache probe entirely.
-        #
         # The key includes the runner image version deliberately, and there are
         # no restore-keys. actions/cache does not re-save on an exact primary
         # key hit ("Cache hit occurred on the primary key ..., not saving
@@ -130,15 +128,14 @@ jobs:
         # install step below falls back to plain apt, so CI keeps working, but it
         # pays the full ~20s every run until the next image bump changes the key.
         # Bump the -v1 suffix to force it sooner.
-        if: inputs.runs_on != 'ubuntu-22.04'
         uses: actions/cache@v4
         with:
           path: ~/.ci-debs
           key: rails-ci-debs-${{ inputs.runs_on }}-${{ steps.runner_image.outputs.version }}-v1
       - name: Ensure ImageMagick and psql are present
         run: |
-          # No-op on ubuntu-22.04 x64, which ships both. The arm images ship
-          # ImageMagick but no postgres client, and the 24.04 images ship
+          # Images differ: ubuntu-22.04 x64 ships both, the 26.04 images ship
+          # psql (PostgreSQL 18) but not ImageMagick, and the 24.04 images ship
           # neither (dropped to stay inside the runner free-disk SLA,
           # actions/runner-images#10772). psql is required whenever the schema
           # is SQL-format, since structure.sql is loaded by shelling out to it.
