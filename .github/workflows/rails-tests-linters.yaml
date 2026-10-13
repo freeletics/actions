@@ -45,13 +45,8 @@ on:
         default: "false"
       runs_on:
         description: >-
-          Runner label for both jobs. Defaults to arm: ubuntu-22.04-arm measured
-          ~33% faster on rspec than ubuntu-22.04 for fl-backend-rails, and
-          removes the x64 CPU lottery (x64 standard runners draw from a mixed
-          Zen3/Zen4/Xeon fleet, giving a ~70% spread run to run; the arm fleet
-          is uniform). Native gems must build on aarch64; a repo whose gems do
-          not can pass ubuntu-26.04. The 22.04 labels are retired on
-          2027-04-17 (actions/runner-images#14254).
+          Runner label for both jobs. Native gems must build on aarch64; a repo
+          whose gems do not can pass ubuntu-26.04.
         required: false
         type: string
         default: "ubuntu-26.04-arm"
@@ -134,11 +129,12 @@ jobs:
           key: rails-ci-debs-${{ inputs.runs_on }}-${{ steps.runner_image.outputs.version }}-v1
       - name: Ensure ImageMagick and psql are present
         run: |
-          # Images differ: ubuntu-22.04 x64 ships both, the 26.04 images ship
-          # psql (PostgreSQL 18) but not ImageMagick, and the 24.04 images ship
-          # neither (dropped to stay inside the runner free-disk SLA,
-          # actions/runner-images#10772). psql is required whenever the schema
-          # is SQL-format, since structure.sql is loaded by shelling out to it.
+          # The 24.04 and 26.04 images do not ship ImageMagick
+          # (actions/runner-images#10772), so this installs it on the default
+          # ubuntu-26.04-arm. psql is on every hosted Ubuntu image (arm since
+          # actions/runner-images#14651) and is checked anyway: it is required
+          # whenever the schema is SQL-format, since structure.sql is loaded by
+          # shelling out to it.
           NEED=""
           command -v convert >/dev/null || command -v magick >/dev/null || NEED="$NEED imagemagick"
           command -v psql >/dev/null || NEED="$NEED postgresql-client"
