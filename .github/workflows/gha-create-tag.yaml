@@ -1,11 +1,57 @@
 name: Create tag/release
 
+# Creates the deploy-prod-<date> tag that releases the selected commit to production.
+#
+# Release gate (PE-48434)
+# -----------------------
+# With require_e2e, the commit is only released if the backend e2e suite passed
+# on it on integration. The suite (backend-e2e.yml in shared-infrastructure)
+# runs after every integration rollout and sets an `e2e/integration` commit
+# status on the deployed commit. A red, running or missing status stops the
+# release before anything is tagged.
+#
+# To release anyway (a hotfix, or a run that is red because of another
+# service), write the reason into skip_e2e_check. Empty means no skip. The
+# reason is saved in the GitHub deployment. Rollbacks (gha-rollback.yaml) are
+# not gated: they re-tag an image that has already been in production.
+#
+# A backend the suite covers opts in from its create-tag.yaml:
+#
+#   on:
+#     workflow_dispatch:
+#       inputs:
+#         deploy: ...
+#         skip_e2e_check:
+#           description: "Leave empty. To release although e2e on integration isn't green, write why"
+#           type: string
+#   jobs:
+#     build:
+#       uses: freeletics/actions/.github/workflows/gha-create-tag.yaml@main
+#       with:
+#         deploy: "true"
+#         require_e2e: true
+#         skip_e2e_check: ${{ inputs.skip_e2e_check }}
+
 on:
   workflow_call:
     inputs:
       deploy:
         required: true
         type: string
+      require_e2e:
+        description: >-
+          Only release a commit whose `e2e/integration` status is green. For the
+          backends the shared-infrastructure backend e2e suite covers.
+        required: false
+        type: boolean
+        default: false
+      skip_e2e_check:
+        description: >-
+          Why to release although the `e2e/integration` status isn't green.
+          Empty means no skip. Saved in the GitHub deployment.
+        required: false
+        type: string
+        default: ""
 
 permissions:
   id-token: write
@@ -25,6 +71,76 @@ jobs:
         with:
           concurrent_skipping: 'same_content'
           cancel_others: 'true'
+
+      - name: Check e2e on integration
+        id: e2e
+        if: inputs.require_e2e
+        uses: actions/github-script@v9.0.0
+        env:
+          SKIP_E2E_CHECK: ${{ inputs.skip_e2e_check }}
+        with:
+          # github.token can't read commit statuses: the callers don't grant
+          # `statuses: read`, and asking for it here would fail every caller
+          # that doesn't.
+          github-token: ${{ secrets.JENKINS_PAT_FLUXCD }}
+          script: |
+            const { owner, repo } = context.repo;
+            const sha = context.sha;
+            const short = sha.slice(0, 7);
+            const reason = process.env.SKIP_E2E_CHECK.trim();
+            const skip = reason !== '';
+
+            const { data } = await github.rest.repos.getCombinedStatusForRef({ owner, repo, ref: sha, per_page: 100 });
+            const status = data.statuses.find(s => s.context === 'e2e/integration');
+            const state = status ? status.state : 'missing';
+            const run = status?.target_url ? ` Run: ${status.target_url}` : '';
+
+            let problem;
+            switch (state) {
+              case 'success':
+                break;
+              case 'pending':
+                problem = `e2e is still running on integration for ${short}, try again in a few minutes.${run}`;
+                break;
+              case 'missing': {
+                // The integration deployment is created at the end of the image build, and the suite
+                // starts once Flux has rolled that image out, so a fresh merge has no status for a while.
+                const { data: deployments } = await github.rest.repos.listDeployments({
+                  owner, repo, sha, environment: 'integration', per_page: 1,
+                });
+                const deployedAt = deployments[0] && new Date(deployments[0].created_at);
+                if (!deployedAt) {
+                  problem = `${short} was never tested on integration: it was never deployed there. ` +
+                    'If it was just merged, wait for Auto Deploy integration and the e2e run after it.';
+                } else if (Date.now() - deployedAt < 30 * 60 * 1000) {
+                  problem = `${short} was deployed to integration at ${deployedAt.toISOString()} and e2e hasn't ` +
+                    'started yet, the rollout is probably still running. Try again in a few minutes.';
+                } else {
+                  problem = `${short} was deployed to integration at ${deployedAt.toISOString()} but was never ` +
+                    'tested there. Deploy it to integration again to start an e2e run.';
+                }
+                break;
+              }
+              default: // failure, error
+                problem = `e2e failed on integration for ${short}: ${status.description}.${run} ` +
+                  'If it failed because of another service or a flaky step, re-run the e2e run once that is fixed.';
+            }
+
+            core.setOutput('state', state);
+            core.setOutput('skip_reason', problem && skip ? reason : '');
+
+            const summary = core.summary.addHeading('Backend e2e on integration', 3);
+            if (!problem) {
+              core.info(`e2e passed on integration for ${short}.${run}`);
+              summary.addRaw(`Passed for ${short}.${run}`, true);
+            } else if (skip) {
+              core.warning(`Releasing without a green e2e check. ${problem}`);
+              summary.addRaw(`Skipped: ${problem}`, true).addRaw(`Reason: ${reason}`, true);
+            } else {
+              core.setFailed(`${problem} To release anyway, run again and write the reason into skip_e2e_check.`);
+              summary.addRaw(`Not released: ${problem}`, true);
+            }
+            await summary.write();
 
       - name: Check out code
         if: github.event.inputs.deploy == 'true'
@@ -48,6 +164,22 @@ jobs:
               ref: "refs/tags/deploy-prod-${{ steps.date.outputs.date }}",
               sha: context.sha
             })
+      - name: Build deployment payload
+        id: payload
+        env:
+          DOCKER_IMAGE_TAG: deploy-prod-${{ steps.date.outputs.date }}
+          DEPLOYED_BY: ${{ github.actor }}
+          E2E_STATE: ${{ steps.e2e.outputs.state }}
+          E2E_SKIP_REASON: ${{ steps.e2e.outputs.skip_reason }}
+        # jq so that a quote in the free-text skip reason can't break the JSON.
+        run: |
+          payload=$(jq -nc \
+            --arg tag "$DOCKER_IMAGE_TAG" --arg by "$DEPLOYED_BY" \
+            --arg e2e "$E2E_STATE" --arg reason "$E2E_SKIP_REASON" '
+            {docker_image_tag: $tag, deployed_by: $by}
+            + (if $e2e == "" then {} else {e2e_integration: $e2e} end)
+            + (if $reason == "" then {} else {e2e_skip_reason: $reason} end)')
+          echo "json=$payload" >> "$GITHUB_OUTPUT"
       - uses: chrnorm/deployment-action@v2
         name: Create GitHub deployment
         id: deployment
@@ -57,7 +189,7 @@ jobs:
           environment-url: 'https://www.freeletics.com'
           initial-status: in_progress
           ref: "deploy-prod-${{ steps.date.outputs.date }}"
-          payload: "{\"docker_image_tag\":\"deploy-prod-${{ steps.date.outputs.date }}\",\"deployed_by\":\"${{github.actor}}\"}"
+          payload: ${{ steps.payload.outputs.json }}
       - name: Update deployment status (in_progress)
         uses: chrnorm/deployment-status@v2
         with:
