@@ -2,6 +2,14 @@ name: Deployment Reminder
 
 on:
   workflow_call:
+    inputs:
+      show_e2e:
+        description: >-
+          Show the `e2e/integration` status of the commit that would be released,
+          which gha-create-tag.yaml checks with require_e2e.
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -38,6 +46,28 @@ jobs:
           echo "send_deployment_reminder=true" >> $GITHUB_OUTPUT
         fi
 
+    - name: Read e2e on integration
+      id: e2e
+      if: ${{ inputs.show_e2e && steps.check_diff.outputs.send_deployment_reminder == 'true' }}
+      # The reminder still goes out without this line.
+      continue-on-error: true
+      uses: actions/github-script@v9.0.0
+      with:
+        # github.token can't read commit statuses, see gha-create-tag.yaml.
+        github-token: ${{ secrets.JENKINS_PAT_FLUXCD }}
+        script: |
+          const { data } = await github.rest.repos.getCombinedStatusForRef({
+            owner: context.repo.owner, repo: context.repo.repo, ref: context.sha, per_page: 100,
+          });
+          const status = data.statuses.find(s => s.context === 'e2e/integration');
+          const link = text => `<${status.target_url}|${text}>`;
+          const text = !status ? 'not tested yet'
+            : status.state === 'success' ? link('passed ✅')
+            : status.state === 'pending' ? link('running ⏳')
+            : link(`${status.description} ❌`);
+          // A whole `- {...}` list item, in JSON so that the description can't break the YAML payload.
+          core.setOutput('field', `- ${JSON.stringify({ type: 'mrkdwn', text: `*E2E on integration:* ${text}` })}`);
+
     - name: Notify Slack
       if: ${{ steps.check_diff.outputs.send_deployment_reminder == 'true' }}
       uses: slackapi/slack-github-action@v4
@@ -57,6 +87,7 @@ jobs:
                   text: "*Service:* <${{ github.server_url }}/${{ github.repository }}|${{ github.repository }}>"
                 - type:  "mrkdwn"
                   text: "*Differences*: <${{ github.server_url }}/${{ github.repository }}/compare/${{ steps.latest_tag.outputs.latest_tag }}...master|View>"
+                ${{ steps.e2e.outputs.field }}
             - type: "actions"
               elements:
                 - type: "button"
