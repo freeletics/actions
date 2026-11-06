@@ -2,6 +2,15 @@ name: Deployment Reminder
 
 on:
   workflow_call:
+    inputs:
+      show_checks:
+        description: >-
+          Show whether the CI and commit statuses of the commit that would be
+          released are green, which gha-create-tag.yaml checks with
+          require_checks.
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -38,6 +47,42 @@ jobs:
           echo "send_deployment_reminder=true" >> $GITHUB_OUTPUT
         fi
 
+    - name: Read CI and e2e
+      id: checks
+      if: ${{ inputs.show_checks && steps.check_diff.outputs.send_deployment_reminder == 'true' }}
+      # The reminder still goes out without this line.
+      continue-on-error: true
+      uses: actions/github-script@v9.0.0
+      with:
+        # github.token can't read commit statuses, see gha-create-tag.yaml.
+        github-token: ${{ secrets.JENKINS_PAT_FLUXCD }}
+        script: |
+          // The same rule as the release gate in gha-create-tag.yaml.
+          const { owner, repo } = context.repo;
+          const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
+            owner, repo, head_sha: context.sha, branch: context.ref.replace(/^refs\/heads\//, ''), event: 'push', per_page: 100,
+          });
+          const latest = new Map();
+          for (const run of runs) {
+            const seen = latest.get(run.workflow_id);
+            if (!seen || run.run_number > seen.run_number) latest.set(run.workflow_id, run);
+          }
+          const { data } = await github.rest.repos.getCombinedStatusForRef({ owner, repo, ref: context.sha, per_page: 100 });
+          const checks = [
+            ...[...latest.values()].map(r => ({
+              name: r.name, url: r.html_url,
+              state: r.status !== 'completed' ? 'pending' : ['success', 'skipped', 'neutral'].includes(r.conclusion) ? 'success' : 'failure',
+            })),
+            ...data.statuses.map(s => ({ name: s.context, url: s.target_url, state: s.state === 'error' ? 'failure' : s.state })),
+          ];
+          const links = state => checks.filter(c => c.state === state).map(c => c.url ? `<${c.url}|${c.name}>` : c.name).join(', ');
+          const text = !latest.size ? 'no CI ran on this commit ❌'
+            : links('failure') ? `${links('failure')} ❌`
+            : links('pending') ? `${links('pending')} running ⏳`
+            : 'all green ✅';
+          // A whole `- {...}` list item, in JSON so that a check name can't break the YAML payload.
+          core.setOutput('field', `- ${JSON.stringify({ type: 'mrkdwn', text: `*Checks:* ${text}` })}`);
+
     - name: Notify Slack
       if: ${{ steps.check_diff.outputs.send_deployment_reminder == 'true' }}
       uses: slackapi/slack-github-action@v4
@@ -57,6 +102,7 @@ jobs:
                   text: "*Service:* <${{ github.server_url }}/${{ github.repository }}|${{ github.repository }}>"
                 - type:  "mrkdwn"
                   text: "*Differences*: <${{ github.server_url }}/${{ github.repository }}/compare/${{ steps.latest_tag.outputs.latest_tag }}...master|View>"
+                ${{ steps.checks.outputs.field }}
             - type: "actions"
               elements:
                 - type: "button"
