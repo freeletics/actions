@@ -16,11 +16,14 @@ name: Create tag/release
 #   shared-infrastructure) sets it after Flux rolled the commit out on
 #   integration, so it also proves the rollout.
 #
+# If the checks can't be read (e.g. the token lacks a permission or GitHub is
+# down), the release is blocked too.
+#
 # To release anyway (a hotfix, or a check that is red because of another
-# service), write the reason into skip_checks. Empty means no skip. The reason
-# and what wasn't green are saved in the GitHub deployment. Rollbacks
-# (gha-rollback.yaml) are not gated: they re-tag an image that has already been
-# in production.
+# service), write the reason into skip_checks. Empty means no skip. It also
+# works when the checks can't be read. The reason and what wasn't green are
+# saved in the GitHub deployment. Rollbacks (gha-rollback.yaml) are not gated:
+# they re-tag an image that has already been in production.
 #
 # A repo opts in from its create-tag.yaml:
 #
@@ -99,8 +102,8 @@ jobs:
             const reason = process.env.SKIP_CHECKS.trim();
             const skip = reason !== '';
             // The repos whose integration rollouts start the backend e2e suite. Keep in sync with REPOS
-            // in shared-infrastructure's backend-e2e.yml: a repo listed here that the suite doesn't
-            // report on can't release without skip_checks.
+            // in shared-infrastructure's backend-e2e.yml and with E2E_REPOS in deployment_reminder.yaml:
+            // a repo listed here that the suite doesn't report on can't release without skip_checks.
             const E2E_REPOS = [
               'core-user-rails', 'fl-backend-rails', 'core-payment-rails',
               'fl-backend-social', 'backend-messaging', 'nutrition-backend-rails',
@@ -110,59 +113,69 @@ jobs:
             const red = [];
             const running = [];
             let missing;
+            // Set when GitHub can't be read, e.g. because the token lacks a permission or the API is
+            // down. That blocks the release like a red check, and skip_checks still releases.
+            let readError;
 
-            // The workflows that pushing the commit to the branch started. Scheduled and manual runs,
-            // like this release or the deployment reminder, are left out, and so are tag builds.
-            const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
-              owner, repo, head_sha: sha, branch, event: 'push', per_page: 100,
-            });
-            // A workflow that ran more than once for the commit counts with its latest run.
-            const latest = new Map();
-            for (const run of runs) {
-              const seen = latest.get(run.workflow_id);
-              if (!seen || run.run_number > seen.run_number) latest.set(run.workflow_id, run);
-            }
-            for (const run of latest.values()) {
-              if (run.status !== 'completed') running.push(`${run.name}: ${run.html_url}`);
-              else if (['success', 'skipped', 'neutral'].includes(run.conclusion)) green.push(run.name);
-              else red.push(`${run.name} (${run.conclusion}): ${run.html_url}`);
-            }
-            if (latest.size === 0) {
-              missing = `No CI ran for ${short}, e.g. because it was merged with GITHUB_TOKEN, which starts ` +
-                'no workflows. Release a commit that CI checked, or push one on top.';
-            }
-
-            const { data } = await github.rest.repos.getCombinedStatusForRef({ owner, repo, ref: sha, per_page: 100 });
-            for (const s of data.statuses) {
-              const line = `${s.context} (${s.description})${s.target_url ? `: ${s.target_url}` : ''}`;
-              if (s.state === 'success') green.push(s.context);
-              else if (s.state === 'pending') running.push(line);
-              else red.push(line);
-            }
-
-            if (E2E_REPOS.includes(repo) && !missing && !data.statuses.some(s => s.context === 'e2e/integration')) {
-              // The integration deployment is created at the end of the image build, and the suite
-              // starts once Flux has rolled that image out, so a fresh merge has no status for a while.
-              const { data: deployments } = await github.rest.repos.listDeployments({
-                owner, repo, sha, environment: 'integration', per_page: 1,
+            try {
+              // The workflows that pushing the commit to the branch started. Scheduled and manual runs,
+              // like this release or the deployment reminder, are left out, and so are tag builds.
+              const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
+                owner, repo, head_sha: sha, branch, event: 'push', per_page: 100,
               });
-              const deployedAt = deployments[0] && new Date(deployments[0].created_at);
-              if (!deployedAt) {
-                missing = `${short} was never tested on integration: it was never deployed there. ` +
-                  'If it was just merged, wait for Auto Deploy integration and the e2e run after it.';
-              } else if (Date.now() - deployedAt < 30 * 60 * 1000) {
-                missing = `${short} was deployed to integration at ${deployedAt.toISOString()} and e2e hasn't ` +
-                  'started yet, the rollout is probably still running. Try again in a few minutes.';
-              } else {
-                missing = `${short} was deployed to integration at ${deployedAt.toISOString()} but was never ` +
-                  'tested there. Deploy it to integration again to start an e2e run.';
+              // A workflow that ran more than once for the commit counts with its latest run.
+              const latest = new Map();
+              for (const run of runs) {
+                const seen = latest.get(run.workflow_id);
+                if (!seen || run.run_number > seen.run_number) latest.set(run.workflow_id, run);
               }
+              for (const run of latest.values()) {
+                if (run.status !== 'completed') running.push(`${run.name}: ${run.html_url}`);
+                else if (['success', 'skipped', 'neutral'].includes(run.conclusion)) green.push(run.name);
+                else red.push(`${run.name} (${run.conclusion}): ${run.html_url}`);
+              }
+              if (latest.size === 0) {
+                missing = `No CI ran for ${short}, e.g. because it was merged with GITHUB_TOKEN, which starts ` +
+                  'no workflows. Release a commit that CI checked, or push one on top.';
+              }
+
+              const { data } = await github.rest.repos.getCombinedStatusForRef({ owner, repo, ref: sha, per_page: 100 });
+              for (const s of data.statuses) {
+                const line = `${s.context} (${s.description})${s.target_url ? `: ${s.target_url}` : ''}`;
+                if (s.state === 'success') green.push(s.context);
+                else if (s.state === 'pending') running.push(line);
+                else red.push(line);
+              }
+
+              if (E2E_REPOS.includes(repo) && !missing && !data.statuses.some(s => s.context === 'e2e/integration')) {
+                // The integration deployment is created at the end of the image build, and the suite
+                // starts once Flux has rolled that image out, so a fresh merge has no status for a while.
+                const { data: deployments } = await github.rest.repos.listDeployments({
+                  owner, repo, sha, environment: 'integration', per_page: 1,
+                });
+                const deployedAt = deployments[0] && new Date(deployments[0].created_at);
+                if (!deployedAt) {
+                  missing = `${short} was never tested on integration: it was never deployed there. ` +
+                    'If it was just merged, wait for Auto Deploy integration and the e2e run after it.';
+                } else if (Date.now() - deployedAt < 30 * 60 * 1000) {
+                  missing = `${short} was deployed to integration at ${deployedAt.toISOString()} and e2e hasn't ` +
+                    'started yet, the rollout is probably still running. Try again in a few minutes.';
+                } else {
+                  missing = `${short} was deployed to integration at ${deployedAt.toISOString()} but was never ` +
+                    'tested there. Deploy it to integration again to start an e2e run.';
+                }
+              }
+            } catch (err) {
+              readError = `Couldn't read the checks for ${short}: ${err.status ? `${err.status} ` : ''}${err.message}`;
             }
 
             const list = items => items.map(i => `\n- ${i}`).join('');
             let state = 'success';
             let problem;
-            if (red.length) {
+            if (readError) {
+              state = 'error';
+              problem = readError;
+            } else if (red.length) {
               state = 'failure';
               problem = `Not green for ${short}:${list(red)}`;
               if (running.length) problem += `\nStill running:${list(running)}`;
@@ -178,7 +191,7 @@ jobs:
             core.setOutput('state', state);
             if (problem && skip) {
               core.setOutput('skip_reason', reason);
-              core.setOutput('not_green', JSON.stringify(state === 'missing' ? [missing] : [...red, ...running]));
+              core.setOutput('not_green', JSON.stringify(['missing', 'error'].includes(state) ? [problem] : [...red, ...running]));
             }
 
             const summary = core.summary.addHeading('Release checks', 3);

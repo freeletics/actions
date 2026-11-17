@@ -59,6 +59,12 @@ jobs:
         script: |
           // The same rule as the release gate in gha-create-tag.yaml.
           const { owner, repo } = context.repo;
+          // The backends whose release also needs an e2e/integration status. Keep in sync with
+          // E2E_REPOS in gha-create-tag.yaml.
+          const E2E_REPOS = [
+            'core-user-rails', 'fl-backend-rails', 'core-payment-rails',
+            'fl-backend-social', 'backend-messaging', 'nutrition-backend-rails',
+          ];
           const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
             owner, repo, head_sha: context.sha, branch: context.ref.replace(/^refs\/heads\//, ''), event: 'push', per_page: 100,
           });
@@ -76,9 +82,12 @@ jobs:
             ...data.statuses.map(s => ({ name: s.context, url: s.target_url, state: s.state === 'error' ? 'failure' : s.state })),
           ];
           const links = state => checks.filter(c => c.state === state).map(c => c.url ? `<${c.url}|${c.name}>` : c.name).join(', ');
+          // The release is blocked until the suite reports, so CI alone being green isn't enough.
+          const e2eMissing = E2E_REPOS.includes(repo) && !data.statuses.some(s => s.context === 'e2e/integration');
           const text = !latest.size ? 'no CI ran on this commit ❌'
             : links('failure') ? `${links('failure')} ❌`
             : links('pending') ? `${links('pending')} running ⏳`
+            : e2eMissing ? 'e2e not reported yet ⏳'
             : 'all green ✅';
           // A whole `- {...}` list item, in JSON so that a check name can't break the YAML payload.
           core.setOutput('field', `- ${JSON.stringify({ type: 'mrkdwn', text: `*Checks:* ${text}` })}`);
