@@ -4,8 +4,8 @@ name: Create tag/release
 #
 # Release gate (PE-48434)
 # -----------------------
-# With require_green_ci, the release stops before anything is tagged unless the
-# commit is green:
+# With require_release_checks, the release stops before anything is tagged
+# unless the commit is green:
 #
 # * Every workflow that the push of the commit started (tests, linters,
 #   Brakeman, the image builds, the integration deploy, ...) and every commit
@@ -40,7 +40,7 @@ name: Create tag/release
 #       uses: freeletics/actions/.github/workflows/gha-create-tag.yaml@main
 #       with:
 #         deploy: "true"
-#         require_green_ci: true
+#         require_release_checks: true
 #         release_anyway_reason: ${{ inputs.release_anyway_reason }}
 
 on:
@@ -49,7 +49,7 @@ on:
       deploy:
         required: true
         type: string
-      require_green_ci:
+      require_release_checks:
         description: >-
           Only release a commit whose CI (the workflows its push started),
           commit statuses and, for the backends with e2e, `e2e/integration` are
@@ -59,8 +59,8 @@ on:
         default: false
       release_anyway_reason:
         description: >-
-          Why to release although require_green_ci isn't met. Empty means
-          require_green_ci applies. Saved in the GitHub deployment.
+          Why to release although require_release_checks isn't met. Empty
+          means require_release_checks applies. Saved in the GitHub deployment.
         required: false
         type: string
         default: ""
@@ -86,7 +86,7 @@ jobs:
 
       - name: Check CI and e2e
         id: checks
-        if: inputs.require_green_ci
+        if: inputs.require_release_checks
         uses: actions/github-script@v9.0.0
         env:
           RELEASE_ANYWAY_REASON: ${{ inputs.release_anyway_reason }}
@@ -99,7 +99,10 @@ jobs:
             const { owner, repo } = context.repo;
             const sha = context.sha;
             const short = sha.slice(0, 7);
-            const branch = context.ref.replace(/^refs\/heads\//, '');
+            // Started from a tag, look for the CI that ran when its commit was pushed to the default branch.
+            const branch = context.ref.startsWith('refs/heads/')
+              ? context.ref.slice('refs/heads/'.length)
+              : context.payload.repository.default_branch;
             const reason = process.env.RELEASE_ANYWAY_REASON.trim();
             const releaseAnyway = reason !== '';
             // The repos whose integration rollouts start the backend e2e suite. Keep in sync with REPOS
@@ -142,7 +145,7 @@ jobs:
 
               const { data } = await github.rest.repos.getCombinedStatusForRef({ owner, repo, ref: sha, per_page: 100 });
               for (const s of data.statuses) {
-                const line = `${s.context} (${s.description})${s.target_url ? `: ${s.target_url}` : ''}`;
+                const line = `${s.context}${s.description ? ` (${s.description})` : ''}${s.target_url ? `: ${s.target_url}` : ''}`;
                 if (s.state === 'success') green.push(s.context);
                 else if (s.state === 'pending') running.push(line);
                 else red.push(line);
@@ -174,8 +177,11 @@ jobs:
             let state = 'success';
             let problem;
             if (readError) {
+              // Keep what was read before the error, it can already show why the release is blocked.
               state = 'error';
               problem = readError;
+              if (red.length) problem += `\nNot green:${list(red)}`;
+              if (running.length) problem += `\nStill running:${list(running)}`;
             } else if (red.length) {
               state = 'failure';
               problem = `Not green for ${short}:${list(red)}`;
@@ -192,7 +198,8 @@ jobs:
             core.setOutput('state', state);
             if (problem && releaseAnyway) {
               core.setOutput('release_anyway_reason', reason);
-              core.setOutput('not_green', JSON.stringify(['missing', 'error'].includes(state) ? [problem] : [...red, ...running]));
+              core.setOutput('not_green', JSON.stringify(
+                state === 'missing' ? [problem] : [...(readError ? [readError] : []), ...red, ...running]));
             }
 
             const summary = core.summary.addHeading('Release checks', 3);
