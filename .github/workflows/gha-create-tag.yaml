@@ -86,7 +86,8 @@ jobs:
 
       - name: Check CI and e2e
         id: checks
-        if: inputs.require_release_checks
+        # Like the other steps, only when the run tags and releases.
+        if: inputs.require_release_checks && github.event.inputs.deploy == 'true'
         uses: actions/github-script@v9.0.0
         env:
           RELEASE_ANYWAY_REASON: ${{ inputs.release_anyway_reason }}
