@@ -4,7 +4,7 @@ name: Create tag/release
 #
 # Release gate (PE-48434)
 # -----------------------
-# With require_checks, the release stops before anything is tagged unless the
+# With require_green_ci, the release stops before anything is tagged unless the
 # commit is green:
 #
 # * Every workflow that the push of the commit started (tests, linters,
@@ -20,10 +20,11 @@ name: Create tag/release
 # down), the release is blocked too.
 #
 # To release anyway (a hotfix, or a check that is red because of another
-# service), write the reason into skip_checks. Empty means no skip. It also
-# works when the checks can't be read. The reason and what wasn't green are
-# saved in the GitHub deployment. Rollbacks (gha-rollback.yaml) are not gated:
-# they re-tag an image that has already been in production.
+# service), write the reason into release_anyway_reason. Empty means the
+# release needs green CI. It also works when the checks can't be read. The
+# reason and what wasn't green are saved in the GitHub deployment. Rollbacks
+# (gha-rollback.yaml) are not gated: they re-tag an image that has already
+# been in production.
 #
 # A repo opts in from its create-tag.yaml:
 #
@@ -31,7 +32,7 @@ name: Create tag/release
 #     workflow_dispatch:
 #       inputs:
 #         deploy: ...
-#         skip_checks:
+#         release_anyway_reason:
 #           description: "Leave empty. To release although CI or e2e isn't green, write why"
 #           type: string
 #   jobs:
@@ -39,8 +40,8 @@ name: Create tag/release
 #       uses: freeletics/actions/.github/workflows/gha-create-tag.yaml@main
 #       with:
 #         deploy: "true"
-#         require_checks: true
-#         skip_checks: ${{ inputs.skip_checks }}
+#         require_green_ci: true
+#         release_anyway_reason: ${{ inputs.release_anyway_reason }}
 
 on:
   workflow_call:
@@ -48,7 +49,7 @@ on:
       deploy:
         required: true
         type: string
-      require_checks:
+      require_green_ci:
         description: >-
           Only release a commit whose CI (the workflows its push started),
           commit statuses and, for the backends with e2e, `e2e/integration` are
@@ -56,10 +57,10 @@ on:
         required: false
         type: boolean
         default: false
-      skip_checks:
+      release_anyway_reason:
         description: >-
-          Why to release although require_checks isn't met. Empty means no
-          skip. Saved in the GitHub deployment.
+          Why to release although require_green_ci isn't met. Empty means
+          require_green_ci applies. Saved in the GitHub deployment.
         required: false
         type: string
         default: ""
@@ -85,10 +86,10 @@ jobs:
 
       - name: Check CI and e2e
         id: checks
-        if: inputs.require_checks
+        if: inputs.require_green_ci
         uses: actions/github-script@v9.0.0
         env:
-          SKIP_CHECKS: ${{ inputs.skip_checks }}
+          RELEASE_ANYWAY_REASON: ${{ inputs.release_anyway_reason }}
         with:
           # github.token can't read commit statuses: the callers don't grant
           # `statuses: read`, and asking for it here would fail every caller
@@ -99,11 +100,11 @@ jobs:
             const sha = context.sha;
             const short = sha.slice(0, 7);
             const branch = context.ref.replace(/^refs\/heads\//, '');
-            const reason = process.env.SKIP_CHECKS.trim();
-            const skip = reason !== '';
+            const reason = process.env.RELEASE_ANYWAY_REASON.trim();
+            const releaseAnyway = reason !== '';
             // The repos whose integration rollouts start the backend e2e suite. Keep in sync with REPOS
             // in shared-infrastructure's backend-e2e.yml and with E2E_REPOS in deployment_reminder.yaml:
-            // a repo listed here that the suite doesn't report on can't release without skip_checks.
+            // a repo listed here that the suite doesn't report on can't release without release_anyway_reason.
             const E2E_REPOS = [
               'core-user-rails', 'fl-backend-rails', 'core-payment-rails',
               'fl-backend-social', 'backend-messaging', 'nutrition-backend-rails',
@@ -114,7 +115,7 @@ jobs:
             const running = [];
             let missing;
             // Set when GitHub can't be read, e.g. because the token lacks a permission or the API is
-            // down. That blocks the release like a red check, and skip_checks still releases.
+            // down. That blocks the release like a red check, and release_anyway_reason still releases.
             let readError;
 
             try {
@@ -189,8 +190,8 @@ jobs:
             }
 
             core.setOutput('state', state);
-            if (problem && skip) {
-              core.setOutput('skip_reason', reason);
+            if (problem && releaseAnyway) {
+              core.setOutput('release_anyway_reason', reason);
               core.setOutput('not_green', JSON.stringify(['missing', 'error'].includes(state) ? [problem] : [...red, ...running]));
             }
 
@@ -198,11 +199,11 @@ jobs:
             if (!problem) {
               core.info(`Everything is green for ${short}: ${green.join(', ')}`);
               summary.addRaw(`Green for ${short}:${list(green)}`, true);
-            } else if (skip) {
+            } else if (releaseAnyway) {
               core.warning(`Releasing although not everything is green. ${problem}`);
-              summary.addRaw(`Skipped: ${problem}`, true).addRaw(`\nReason: ${reason}`, true);
+              summary.addRaw(`Released anyway: ${problem}`, true).addRaw(`\nReason: ${reason}`, true);
             } else {
-              core.setFailed(`${problem}\nTo release anyway, run again and write the reason into skip_checks.`);
+              core.setFailed(`${problem}\nTo release anyway, run again and write the reason into release_anyway_reason.`);
               summary.addRaw(`Not released: ${problem}`, true);
             }
             await summary.write();
@@ -235,16 +236,16 @@ jobs:
           DOCKER_IMAGE_TAG: deploy-prod-${{ steps.date.outputs.date }}
           DEPLOYED_BY: ${{ github.actor }}
           CHECKS_STATE: ${{ steps.checks.outputs.state }}
-          SKIP_CHECKS_REASON: ${{ steps.checks.outputs.skip_reason }}
+          RELEASE_ANYWAY_REASON: ${{ steps.checks.outputs.release_anyway_reason }}
           NOT_GREEN: ${{ steps.checks.outputs.not_green }}
         # jq so that a quote in the free-text skip reason can't break the JSON.
         run: |
           payload=$(jq -nc \
             --arg tag "$DOCKER_IMAGE_TAG" --arg by "$DEPLOYED_BY" --arg checks "$CHECKS_STATE" \
-            --arg reason "$SKIP_CHECKS_REASON" --arg not_green "$NOT_GREEN" '
+            --arg reason "$RELEASE_ANYWAY_REASON" --arg not_green "$NOT_GREEN" '
             {docker_image_tag: $tag, deployed_by: $by}
             + (if $checks == "" then {} else {checks: $checks} end)
-            + (if $reason == "" then {} else {skip_checks_reason: $reason, not_green: ($not_green | fromjson)} end)')
+            + (if $reason == "" then {} else {release_anyway_reason: $reason, not_green: ($not_green | fromjson)} end)')
           echo "json=$payload" >> "$GITHUB_OUTPUT"
       - uses: chrnorm/deployment-action@v2
         name: Create GitHub deployment
