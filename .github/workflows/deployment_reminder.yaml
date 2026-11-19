@@ -2,6 +2,16 @@ name: Deployment Reminder
 
 on:
   workflow_call:
+    inputs:
+      show_checks:
+        description: >-
+          Only send the reminder when master HEAD passes the checks of
+          require_release_checks in gha-create-tag.yaml, waiting up to 30
+          minutes for running ones. Otherwise send "master needs a look" with
+          what isn't green and no Deploy button.
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -38,8 +48,119 @@ jobs:
           echo "send_deployment_reminder=true" >> $GITHUB_OUTPUT
         fi
 
+    - name: Check whether master can be released
+      id: checks
+      if: ${{ inputs.show_checks && steps.check_diff.outputs.send_deployment_reminder == 'true' }}
+      # If this step fails or times out, the plain reminder goes out as without show_checks.
+      continue-on-error: true
+      # Waits up to 30 minutes, see WAIT_MINUTES.
+      timeout-minutes: 40
+      uses: actions/github-script@v9.0.0
+      with:
+        # github.token can't read commit statuses, see gha-create-tag.yaml.
+        github-token: ${{ secrets.JENKINS_PAT_FLUXCD }}
+        script: |
+          // The same rules as the release gate in gha-create-tag.yaml. Keep them in sync.
+          const { owner, repo } = context.repo;
+          const sha = context.sha;
+          const branch = context.ref.startsWith('refs/heads/')
+            ? context.ref.slice('refs/heads/'.length)
+            : context.payload.repository.default_branch;
+          // The backends whose release also needs an e2e/integration status. Keep in sync with
+          // E2E_REPOS in gha-create-tag.yaml.
+          const E2E_REPOS = [
+            'core-user-rails', 'fl-backend-rails', 'core-payment-rails',
+            'fl-backend-social', 'backend-messaging', 'nutrition-backend-rails',
+          ];
+          // How long to wait for running checks. A merge shortly before the reminder needs about
+          // 11 minutes until its e2e result (build, Flux rollout, suite).
+          const WAIT_MINUTES = 30;
+          const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          const link = (url, name) => (url ? `<${url}|${esc(name)}>` : esc(name));
+
+          async function read() {
+            const red = [];
+            const running = [];
+            let missing;
+            try {
+              const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
+                owner, repo, head_sha: sha, branch, event: 'push', per_page: 100,
+              });
+              const latest = new Map();
+              for (const run of runs) {
+                const seen = latest.get(run.workflow_id);
+                if (!seen || run.run_number > seen.run_number) latest.set(run.workflow_id, run);
+              }
+              for (const run of latest.values()) {
+                if (run.status !== 'completed') running.push(link(run.html_url, run.name));
+                else if (!['success', 'skipped', 'neutral'].includes(run.conclusion)) {
+                  red.push(`${link(run.html_url, run.name)}: ${run.conclusion}`);
+                }
+              }
+              if (!latest.size) missing = 'No CI ran on this commit, e.g. because it was merged with GITHUB_TOKEN';
+
+              const { data } = await github.rest.repos.getCombinedStatusForRef({ owner, repo, ref: sha, per_page: 100 });
+              for (const s of data.statuses) {
+                if (s.state === 'pending') running.push(link(s.target_url, s.context));
+                else if (s.state !== 'success') red.push(`${link(s.target_url, s.context)}: ${s.state}`);
+              }
+
+              if (E2E_REPOS.includes(repo) && !missing && !data.statuses.some(s => s.context === 'e2e/integration')) {
+                const { data: deployments } = await github.rest.repos.listDeployments({
+                  owner, repo, sha, environment: 'integration', per_page: 1,
+                });
+                const deployedAt = deployments[0] && new Date(deployments[0].created_at);
+                if (!deployedAt) {
+                  missing = 'Never deployed to integration, so e2e never ran on it';
+                } else if (Date.now() - deployedAt < 30 * 60 * 1000) {
+                  // The rollout or the suite is still running.
+                  running.push('e2e on integration');
+                } else {
+                  const at = deployedAt.toISOString().slice(0, 16).replace('T', ' ');
+                  missing = `Deployed to integration at ${at} UTC, but e2e never ran on it`;
+                }
+              }
+              return { red, running, missing };
+            } catch (err) {
+              return { red, running, error: `Couldn't read the checks: ${err.status ? `${err.status} ` : ''}${err.message}` };
+            }
+          }
+
+          // Wait while something is still running. Once something is red, waiting doesn't change the answer.
+          const deadline = Date.now() + WAIT_MINUTES * 60 * 1000;
+          let checks = await read();
+          while (!checks.error && !checks.red.length && checks.running.length && Date.now() < deadline) {
+            core.info(`Waiting for: ${checks.running.join(', ')}`);
+            await new Promise(resolve => setTimeout(resolve, 60 * 1000));
+            checks = await read();
+          }
+          const { red, running, missing, error } = checks;
+          const waited = Date.now() >= deadline ? ` after ${WAIT_MINUTES} min` : '';
+          const problems = [
+            ...(error ? [esc(error)] : []),
+            ...red,
+            ...running.map(r => `${r}: still running${waited}`),
+            // Like in the gate, a missing e2e only counts once nothing else is open.
+            ...(missing && !red.length && !running.length ? [missing] : []),
+          ];
+
+          // Each output is a whole `- {...}` list item, in JSON so that a check name can't break
+          // the YAML payload.
+          if (!problems.length) {
+            core.setOutput('ready', 'true');
+            core.setOutput('field', `- ${JSON.stringify({ type: 'mrkdwn', text: '*Checks:* all green ✅' })}`);
+          } else {
+            core.setOutput('ready', 'false');
+            const shown = problems.slice(0, 10);
+            if (problems.length > shown.length) shown.push(`and ${problems.length - shown.length} more`);
+            const commit = link(`${context.serverUrl}/${owner}/${repo}/commit/${sha}`, sha.slice(0, 7));
+            const text = `*${commit} on ${esc(branch)} can't be released:*\n${shown.map(p => `• ${p}`).join('\n')}`;
+            core.setOutput('details', `- ${JSON.stringify({ type: 'section', text: { type: 'mrkdwn', text } })}`);
+          }
+
     - name: Notify Slack
-      if: ${{ steps.check_diff.outputs.send_deployment_reminder == 'true' }}
+      # With show_checks, only when master HEAD can be released.
+      if: ${{ steps.check_diff.outputs.send_deployment_reminder == 'true' && steps.checks.outputs.ready != 'false' }}
       uses: slackapi/slack-github-action@v4
       with:
         errors: true
@@ -57,6 +178,7 @@ jobs:
                   text: "*Service:* <${{ github.server_url }}/${{ github.repository }}|${{ github.repository }}>"
                 - type:  "mrkdwn"
                   text: "*Differences*: <${{ github.server_url }}/${{ github.repository }}/compare/${{ steps.latest_tag.outputs.latest_tag }}...master|View>"
+                ${{ steps.checks.outputs.field }}
             - type: "actions"
               elements:
                 - type: "button"
@@ -64,3 +186,25 @@ jobs:
                     type: "plain_text"
                     text: "Deploy"
                   url: "${{ github.server_url }}/${{ github.repository }}/actions/workflows/create-tag.yaml"
+
+    - name: Notify Slack that master needs a look
+      if: ${{ steps.checks.outputs.ready == 'false' }}
+      uses: slackapi/slack-github-action@v4
+      with:
+        errors: true
+        webhook: ${{secrets.DEPLOYMENT_REMINDER_SLACK_WEBHOOK}}
+        webhook-type: incoming-webhook
+        # No Deploy button: the release would be blocked.
+        payload: |
+          blocks:
+            - type: "header"
+              text:
+                type: "plain_text"
+                text: "⚠️ master needs a look"
+            - type: "section"
+              fields:
+                - type:  "mrkdwn"
+                  text: "*Service:* <${{ github.server_url }}/${{ github.repository }}|${{ github.repository }}>"
+                - type:  "mrkdwn"
+                  text: "*Differences*: <${{ github.server_url }}/${{ github.repository }}/compare/${{ steps.latest_tag.outputs.latest_tag }}...master|View>"
+            ${{ steps.checks.outputs.details }}

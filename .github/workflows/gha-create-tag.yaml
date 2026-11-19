@@ -1,11 +1,69 @@
 name: Create tag/release
 
+# Creates the deploy-prod-<date> tag that releases the selected commit to production.
+#
+# Release gate (PE-48434)
+# -----------------------
+# With require_release_checks, the release stops before anything is tagged
+# unless the commit is green:
+#
+# * Every workflow that the push of the commit started (tests, linters,
+#   Brakeman, the image builds, the integration deploy, ...) and every commit
+#   status must have finished green. A commit that no CI ran on at all, e.g.
+#   one merged with GITHUB_TOKEN, doesn't count as green.
+# * In the repos the backend e2e suite covers (E2E_REPOS below), the commit
+#   must also have an `e2e/integration` status. The suite (backend-e2e.yml in
+#   shared-infrastructure) sets it after Flux rolled the commit out on
+#   integration, so it also proves the rollout.
+#
+# If the checks can't be read (e.g. the token lacks a permission or GitHub is
+# down), the release is blocked too.
+#
+# To release anyway (a hotfix, or a check that is red because of another
+# service), write the reason into release_anyway_reason. Empty means the
+# release needs green CI. It also works when the checks can't be read. The
+# reason and what wasn't green are saved in the GitHub deployment. Rollbacks
+# (gha-rollback.yaml) are not gated: they re-tag an image that has already
+# been in production.
+#
+# A repo opts in from its create-tag.yaml:
+#
+#   on:
+#     workflow_dispatch:
+#       inputs:
+#         deploy: ...
+#         release_anyway_reason:
+#           description: "Leave empty. To release although CI or e2e isn't green, write why"
+#           type: string
+#   jobs:
+#     build:
+#       uses: freeletics/actions/.github/workflows/gha-create-tag.yaml@main
+#       with:
+#         deploy: "true"
+#         require_release_checks: true
+#         release_anyway_reason: ${{ inputs.release_anyway_reason }}
+
 on:
   workflow_call:
     inputs:
       deploy:
         required: true
         type: string
+      require_release_checks:
+        description: >-
+          Only release a commit whose CI (the workflows its push started),
+          commit statuses and, for the backends with e2e, `e2e/integration` are
+          all green.
+        required: false
+        type: boolean
+        default: false
+      release_anyway_reason:
+        description: >-
+          Why to release although require_release_checks isn't met. Empty
+          means require_release_checks applies. Saved in the GitHub deployment.
+        required: false
+        type: string
+        default: ""
 
 permissions:
   id-token: write
@@ -25,6 +83,138 @@ jobs:
         with:
           concurrent_skipping: 'same_content'
           cancel_others: 'true'
+
+      - name: Check CI and e2e
+        id: checks
+        # Like the other steps, only when the run tags and releases.
+        if: inputs.require_release_checks && github.event.inputs.deploy == 'true'
+        uses: actions/github-script@v9.0.0
+        env:
+          RELEASE_ANYWAY_REASON: ${{ inputs.release_anyway_reason }}
+        with:
+          # github.token can't read commit statuses: the callers don't grant
+          # `statuses: read`, and asking for it here would fail every caller
+          # that doesn't.
+          github-token: ${{ secrets.JENKINS_PAT_FLUXCD }}
+          script: |
+            const { owner, repo } = context.repo;
+            const sha = context.sha;
+            const short = sha.slice(0, 7);
+            // Started from a tag, look for the CI that ran when its commit was pushed to the default branch.
+            const branch = context.ref.startsWith('refs/heads/')
+              ? context.ref.slice('refs/heads/'.length)
+              : context.payload.repository.default_branch;
+            const reason = process.env.RELEASE_ANYWAY_REASON.trim();
+            const releaseAnyway = reason !== '';
+            // The repos whose integration rollouts start the backend e2e suite. Keep in sync with REPOS
+            // in shared-infrastructure's backend-e2e.yml and with E2E_REPOS in deployment_reminder.yaml:
+            // a repo listed here that the suite doesn't report on can't release without release_anyway_reason.
+            const E2E_REPOS = [
+              'core-user-rails', 'fl-backend-rails', 'core-payment-rails',
+              'fl-backend-social', 'backend-messaging', 'nutrition-backend-rails',
+            ];
+
+            const green = [];
+            const red = [];
+            const running = [];
+            let missing;
+            // Set when GitHub can't be read, e.g. because the token lacks a permission or the API is
+            // down. That blocks the release like a red check, and release_anyway_reason still releases.
+            let readError;
+
+            try {
+              // The workflows that pushing the commit to the branch started. Scheduled and manual runs,
+              // like this release or the deployment reminder, are left out, and so are tag builds.
+              const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
+                owner, repo, head_sha: sha, branch, event: 'push', per_page: 100,
+              });
+              // A workflow that ran more than once for the commit counts with its latest run.
+              const latest = new Map();
+              for (const run of runs) {
+                const seen = latest.get(run.workflow_id);
+                if (!seen || run.run_number > seen.run_number) latest.set(run.workflow_id, run);
+              }
+              for (const run of latest.values()) {
+                if (run.status !== 'completed') running.push(`${run.name}: ${run.html_url}`);
+                else if (['success', 'skipped', 'neutral'].includes(run.conclusion)) green.push(run.name);
+                else red.push(`${run.name} (${run.conclusion}): ${run.html_url}`);
+              }
+              if (latest.size === 0) {
+                missing = `No CI ran for ${short}, e.g. because it was merged with GITHUB_TOKEN, which starts ` +
+                  'no workflows. Release a commit that CI checked, or push one on top.';
+              }
+
+              const { data } = await github.rest.repos.getCombinedStatusForRef({ owner, repo, ref: sha, per_page: 100 });
+              for (const s of data.statuses) {
+                const line = `${s.context}${s.description ? ` (${s.description})` : ''}${s.target_url ? `: ${s.target_url}` : ''}`;
+                if (s.state === 'success') green.push(s.context);
+                else if (s.state === 'pending') running.push(line);
+                else red.push(line);
+              }
+
+              if (E2E_REPOS.includes(repo) && !missing && !data.statuses.some(s => s.context === 'e2e/integration')) {
+                // The integration deployment is created at the end of the image build, and the suite
+                // starts once Flux has rolled that image out, so a fresh merge has no status for a while.
+                const { data: deployments } = await github.rest.repos.listDeployments({
+                  owner, repo, sha, environment: 'integration', per_page: 1,
+                });
+                const deployedAt = deployments[0] && new Date(deployments[0].created_at);
+                if (!deployedAt) {
+                  missing = `${short} was never tested on integration: it was never deployed there. ` +
+                    'If it was just merged, wait for Auto Deploy integration and the e2e run after it.';
+                } else if (Date.now() - deployedAt < 30 * 60 * 1000) {
+                  missing = `${short} was deployed to integration at ${deployedAt.toISOString()} and e2e hasn't ` +
+                    'started yet, the rollout is probably still running. Try again in a few minutes.';
+                } else {
+                  missing = `${short} was deployed to integration at ${deployedAt.toISOString()} but was never ` +
+                    'tested there. Deploy it to integration again to start an e2e run.';
+                }
+              }
+            } catch (err) {
+              readError = `Couldn't read the checks for ${short}: ${err.status ? `${err.status} ` : ''}${err.message}`;
+            }
+
+            const list = items => items.map(i => `\n- ${i}`).join('');
+            let state = 'success';
+            let problem;
+            if (readError) {
+              // Keep what was read before the error, it can already show why the release is blocked.
+              state = 'error';
+              problem = readError;
+              if (red.length) problem += `\nNot green:${list(red)}`;
+              if (running.length) problem += `\nStill running:${list(running)}`;
+            } else if (red.length) {
+              state = 'failure';
+              problem = `Not green for ${short}:${list(red)}`;
+              if (running.length) problem += `\nStill running:${list(running)}`;
+              problem += '\nIf it failed because of another service or a flaky step, re-run it once that is fixed.';
+            } else if (running.length) {
+              state = 'pending';
+              problem = `Still running for ${short}, try again in a few minutes:${list(running)}`;
+            } else if (missing) {
+              state = 'missing';
+              problem = missing;
+            }
+
+            core.setOutput('state', state);
+            if (problem && releaseAnyway) {
+              core.setOutput('release_anyway_reason', reason);
+              core.setOutput('not_green', JSON.stringify(
+                state === 'missing' ? [problem] : [...(readError ? [readError] : []), ...red, ...running]));
+            }
+
+            const summary = core.summary.addHeading('Release checks', 3);
+            if (!problem) {
+              core.info(`Everything is green for ${short}: ${green.join(', ')}`);
+              summary.addRaw(`Green for ${short}:${list(green)}`, true);
+            } else if (releaseAnyway) {
+              core.warning(`Releasing although not everything is green. ${problem}`);
+              summary.addRaw(`Released anyway: ${problem}`, true).addRaw(`\nReason: ${reason}`, true);
+            } else {
+              core.setFailed(`${problem}\nTo release anyway, run again and write the reason into release_anyway_reason.`);
+              summary.addRaw(`Not released: ${problem}`, true);
+            }
+            await summary.write();
 
       - name: Check out code
         if: github.event.inputs.deploy == 'true'
@@ -48,6 +238,23 @@ jobs:
               ref: "refs/tags/deploy-prod-${{ steps.date.outputs.date }}",
               sha: context.sha
             })
+      - name: Build deployment payload
+        id: payload
+        env:
+          DOCKER_IMAGE_TAG: deploy-prod-${{ steps.date.outputs.date }}
+          DEPLOYED_BY: ${{ github.actor }}
+          CHECKS_STATE: ${{ steps.checks.outputs.state }}
+          RELEASE_ANYWAY_REASON: ${{ steps.checks.outputs.release_anyway_reason }}
+          NOT_GREEN: ${{ steps.checks.outputs.not_green }}
+        # jq so that a quote in the free-text skip reason can't break the JSON.
+        run: |
+          payload=$(jq -nc \
+            --arg tag "$DOCKER_IMAGE_TAG" --arg by "$DEPLOYED_BY" --arg checks "$CHECKS_STATE" \
+            --arg reason "$RELEASE_ANYWAY_REASON" --arg not_green "$NOT_GREEN" '
+            {docker_image_tag: $tag, deployed_by: $by}
+            + (if $checks == "" then {} else {checks: $checks} end)
+            + (if $reason == "" then {} else {release_anyway_reason: $reason, not_green: ($not_green | fromjson)} end)')
+          echo "json=$payload" >> "$GITHUB_OUTPUT"
       - uses: chrnorm/deployment-action@v2
         name: Create GitHub deployment
         id: deployment
@@ -57,7 +264,7 @@ jobs:
           environment-url: 'https://www.freeletics.com'
           initial-status: in_progress
           ref: "deploy-prod-${{ steps.date.outputs.date }}"
-          payload: "{\"docker_image_tag\":\"deploy-prod-${{ steps.date.outputs.date }}\",\"deployed_by\":\"${{github.actor}}\"}"
+          payload: ${{ steps.payload.outputs.json }}
       - name: Update deployment status (in_progress)
         uses: chrnorm/deployment-status@v2
         with:
